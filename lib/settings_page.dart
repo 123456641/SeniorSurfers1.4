@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:io'; // Import for File
-import 'header_widget.dart'; // Import the custom header widget
-import 'package:permission_handler/permission_handler.dart'; // Import for permission handling
+import 'dart:io';
+import 'header_widget.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -16,6 +16,9 @@ class _SettingsPageState extends State<SettingsPage> {
   double _fontSize = 16.0;
   String _accountName = 'John Doe';
   String _email = 'johndoe@example.com';
+  String _firstName = 'John';
+  String _lastName = 'Doe';
+  String _phoneNumber = '123-456-7890';
 
   List<String> fontSizeOptions = ['Small', 'Medium', 'Large'];
   String selectedFontSize = 'Medium';
@@ -23,16 +26,38 @@ class _SettingsPageState extends State<SettingsPage> {
   final picker = ImagePicker();
   final SupabaseClient supabase = Supabase.instance.client;
 
+  final _formKey = GlobalKey<FormState>();
+  bool isEditable = false;
+
   @override
   void initState() {
     super.initState();
-    requestStoragePermission(); // Request storage permission on start
+    requestStoragePermission();
+    fetchProfilePicture();
   }
 
-  // Request storage permissions
   Future<void> requestStoragePermission() async {
-    final status = await Permission.photos.request(); // for iOS
-    final storageStatus = await Permission.storage.request(); // for Android
+    await Permission.photos.request();
+    await Permission.storage.request();
+  }
+
+  Future<void> fetchProfilePicture() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final response =
+        await supabase
+            .from('users')
+            .select('profile_picture_url')
+            .eq('id', user.id)
+            .maybeSingle();
+
+    final url = response?['profile_picture_url'];
+    if (url != null && mounted) {
+      setState(() {
+        profilePictureUrl = url;
+      });
+    }
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -53,24 +78,40 @@ class _SettingsPageState extends State<SettingsPage> {
 
     try {
       await supabase.storage.from('profiles').upload(filePath, file);
-
       final publicUrl = supabase.storage
           .from('profiles')
           .getPublicUrl(filePath);
-
-      setState(() {
-        profilePictureUrl = publicUrl;
-      });
 
       await supabase
           .from('users')
           .update({'profile_picture_url': publicUrl})
           .eq('id', user.id);
 
-      print('Image uploaded successfully!');
-      print('Public URL: $publicUrl');
+      setState(() {
+        profilePictureUrl = publicUrl;
+      });
+
+      print('Image uploaded and saved successfully!');
     } catch (e) {
       print('Upload error: $e');
+    }
+  }
+
+  void _toggleEditability() {
+    setState(() {
+      isEditable = !isEditable;
+    });
+  }
+
+  void _saveChanges() {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Changes saved successfully!')));
+      setState(() {
+        isEditable = false;
+      });
     }
   }
 
@@ -89,7 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 backgroundImage:
                     profilePictureUrl != null
                         ? NetworkImage(profilePictureUrl!)
-                        : AssetImage('assets/images/edlerpfp.png')
+                        : AssetImage('assets/images/elderpfp.png')
                             as ImageProvider,
                 child:
                     profilePictureUrl == null
@@ -113,13 +154,77 @@ class _SettingsPageState extends State<SettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Account Details',
-          style: TextStyle(fontSize: _fontSize, fontWeight: FontWeight.bold),
+        Row(
+          children: [
+            Text(
+              'Account Details',
+              style: TextStyle(
+                fontSize: _fontSize,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Spacer(),
+            isEditable
+                ? TextButton(
+                  onPressed: _saveChanges,
+                  child: Text(
+                    'Apply changes',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                )
+                : IconButton(
+                  icon: Icon(Icons.edit, color: Colors.red),
+                  onPressed: _toggleEditability,
+                ),
+          ],
         ),
         SizedBox(height: 10),
-        Text('Name: $_accountName', style: TextStyle(fontSize: _fontSize)),
-        Text('Email: $_email', style: TextStyle(fontSize: _fontSize)),
+        Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                initialValue: _firstName,
+                decoration: InputDecoration(labelText: 'First Name'),
+                enabled: isEditable,
+                validator:
+                    (value) => value!.isEmpty ? 'Enter first name' : null,
+                onSaved: (value) => _firstName = value!,
+              ),
+              SizedBox(height: 10),
+              TextFormField(
+                initialValue: _lastName,
+                decoration: InputDecoration(labelText: 'Last Name'),
+                enabled: isEditable,
+                validator: (value) => value!.isEmpty ? 'Enter last name' : null,
+                onSaved: (value) => _lastName = value!,
+              ),
+              SizedBox(height: 10),
+              TextFormField(
+                initialValue: _phoneNumber,
+                decoration: InputDecoration(labelText: 'Phone Number'),
+                enabled: isEditable,
+                validator:
+                    (value) => value!.isEmpty ? 'Enter phone number' : null,
+                onSaved: (value) => _phoneNumber = value!,
+              ),
+              SizedBox(height: 10),
+              TextFormField(
+                initialValue: _email,
+                decoration: InputDecoration(labelText: 'Email'),
+                enabled: false,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Enter email';
+                  } else if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                    return 'Enter a valid email address';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

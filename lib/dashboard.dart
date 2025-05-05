@@ -100,25 +100,6 @@ class DashboardPage extends StatelessWidget {
                       ],
                     ),
                   ),
-
-                  // TEMPORARY TEST BUTTON - DELETE WHEN DONE TESTING
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/settingsD');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 15,
-                      ),
-                    ),
-                    child: const Text(
-                      'Go to Settings (TEMPORARY TEST BUTTON)',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
-                  ),
                 ],
               ),
             ),
