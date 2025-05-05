@@ -13,7 +13,12 @@ class DashboardPage extends StatelessWidget {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.only(left: 10.0, top: 8.0, bottom: 8.0, right: 10.0),
+              padding: const EdgeInsets.only(
+                left: 10.0,
+                top: 8.0,
+                bottom: 8.0,
+                right: 10.0,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -28,7 +33,11 @@ class DashboardPage extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.settings, size: 30, color: Color(0xFF27445D)),
+                    icon: const Icon(
+                      Icons.settings,
+                      size: 30,
+                      color: Color(0xFF27445D),
+                    ),
                     onPressed: () {
                       Navigator.pushNamed(context, '/settings');
                     },
@@ -123,30 +132,33 @@ class _ImageButtonState extends State<ImageButton> {
         onTap: _handleTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          transform: _isHovered ? (Matrix4.identity()..scale(1.05)) : Matrix4.identity(),
+          transform:
+              _isHovered
+                  ? (Matrix4.identity()..scale(1.05))
+                  : Matrix4.identity(),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: _isHovered ? Colors.black.withOpacity(0.1) : Colors.transparent,
-            border: _isHovered ? Border.all(color: Colors.blue, width: 3) : null,
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.3),
-                      spreadRadius: 2,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
-                    )
-                  ]
-                : null,
+            color:
+                _isHovered ? Colors.black.withOpacity(0.1) : Colors.transparent,
+            border:
+                _isHovered ? Border.all(color: Colors.blue, width: 3) : null,
+            boxShadow:
+                _isHovered
+                    ? [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.3),
+                        spreadRadius: 2,
+                        blurRadius: 5,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                    : null,
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.asset(
-                widget.imagePath,
-                fit: BoxFit.contain,
-              ),
+              child: Image.asset(widget.imagePath, fit: BoxFit.contain),
             ),
           ),
         ),

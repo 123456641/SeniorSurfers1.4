@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:app_links/app_links.dart';
-import 'package:provider/provider.dart';
+
+import 'package:senior_surfers/settings/settings_page.dart';
 import 'welcome_page.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
 import 'dashboard.dart';
 import 'tutorial/tutorial_page.dart';
 import 'practice_mode.dart';
-import 'settings/settings_page.dart';
 import 'tech glossary/tech_glossary.dart';
 import 'games_page.dart';
 import 'admin/admin_dashboard.dart';
@@ -16,9 +15,6 @@ import 'admin/admin_login.dart';
 import 'notification/notification.dart';
 import 'tutorial/googlemeet.dart';
 import 'progress/progress.dart';
-import 'community forum/comdboard.dart';
-//import 'community forum/repliesPage.dart'; // Make sure this file exists
-import 'providers/font_size_provider.dart'; // Import the new provider
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,84 +28,32 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final _appLinks = AppLinks();
-  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _handleIncomingLinks();
-  }
-
-  void _handleIncomingLinks() {
-    _appLinks.uriLinkStream.listen((Uri? uri) {
-      if (uri != null && uri.path == '/reset-password') {
-        final token = uri.queryParameters['access_token'];
-        if (token != null) {
-          Navigator.pushNamed(
-            navigatorKey.currentContext!,
-            '/reset-password',
-            arguments: token,
-          );
-        }
-      }
-    }, onError: (err) {
-      debugPrint('AppLinks error: $err');
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // Wrap with MultiProvider to provide FontSizeProvider to all widgets
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => FontSizeProvider()),
-        // Add other providers here if needed
-      ],
-      child: Consumer<FontSizeProvider>(
-        builder: (context, fontSizeProvider, child) {
-          return MaterialApp(
-            title: 'Senior Surfers',
-            debugShowCheckedModeBanner: false,
-            navigatorKey: navigatorKey,
-            theme: ThemeData(
-              primarySwatch: Colors.blue,
-              // Apply font size scaling to the entire app
-              textTheme: Theme.of(context).textTheme.apply(
-                    fontSizeFactor: fontSizeProvider.fontSize / 16.0,
-                  ),
-            ),
-            initialRoute: '/',
-            routes: {
-              '/': (context) => const WelcomePage(),
-              '/login': (context) => const LoginPagee(),
-              '/signup': (context) => const SignUpPage(),
-              '/dashboard': (context) => const DashboardPage(),
-              '/tutorials': (context) => TutorialPage(),
-              '/practice': (context) => PracticeModePage(),
-              '/settings': (context) => const SettingsPage(),
-              '/techglossary': (context) => TechGlossaryPage(),
-              '/games': (context) => const GamesPage(),
-              '/admin': (context) => AdminDashboard(),
-              '/admin-login': (context) => const AdminLoginPage(),
-              '/notification': (context) => NotificationPage(),
-              '/googlemeet': (context) => const GoogleMeetTutorialPage(),
-              '/progress': (context) => const ProgressPage(),
-              '/communitydashboard': (context) => const ProgressPage(),
-              '/community': (context) => const CommunityForumPage(),
-              // '/replies': (context) => const repliesPage(), // Only if you have this page
-            },
-          );
-        },
-      ),
+    return MaterialApp(
+      title: 'Senior Surfers',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(primarySwatch: Colors.blue),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const WelcomePage(),
+        '/login': (context) => const LoginPagee(),
+        '/signup': (context) => const SignUpPage(),
+        '/dashboard': (context) => const DashboardPage(),
+        '/tutorials': (context) => TutorialPage(),
+        '/practice': (context) => PracticeModePage(),
+        '/settings': (context) => const SettingsPage(),
+        '/techglossary': (context) => TechGlossaryPage(),
+        '/games': (context) => const GamesPage(),
+        '/admin': (context) => AdminDashboard(),
+        '/admin-login': (context) => const AdminLoginPage(),
+        '/notification': (context) => NotificationPage(),
+        '/googlemeet': (context) => const GoogleMeetTutorialPage(),
+        '/progress': (context) => const ProgressPage(),
+      },
     );
   }
 }
