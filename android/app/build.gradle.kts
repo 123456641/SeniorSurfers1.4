@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.senior_surfers"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion =  "27.0.12077973" 
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -20,20 +20,17 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.senior_surfers"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        
+        // Set the minSdkVersion and targetSdkVersion correctly
+        minSdkVersion(21) // Use function invocation
+        targetSdkVersion(flutter.targetSdkVersion) // Use function invocation with flutter version
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

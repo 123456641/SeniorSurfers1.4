@@ -35,11 +35,11 @@ class DashboardPage extends StatelessWidget {
                   IconButton(
                     icon: const Icon(
                       Icons.settings,
-                      size: 30,
+                      size: 40,
                       color: Color(0xFF27445D),
                     ),
                     onPressed: () {
-                      Navigator.pushNamed(context, '/settings');
+                      Navigator.pushNamed(context, '/settingsD');
                     },
                     tooltip: 'Settings',
                   ),
@@ -47,52 +47,77 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
+              child: Column(
                 children: [
-                  ImageButton(
-                    imagePath: "assets/images/tutorial.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/tutorials');
-                    },
+                  Expanded(
+                    child: GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      children: [
+                        ImageButton(
+                          imagePath: "assets/images/tutorial.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/tutorials');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/practice.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/practice');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/tech_glossary.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/techglossary');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/notification.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/notification');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/games.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/games');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/community_forum.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/community');
+                          },
+                        ),
+                        ImageButton(
+                          imagePath: "assets/images/achievements.png",
+                          onTap: () {
+                            Navigator.pushNamed(context, '/achievements');
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                  ImageButton(
-                    imagePath: "assets/images/practice.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/practice');
+
+                  // TEMPORARY TEST BUTTON - DELETE WHEN DONE TESTING
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/settingsD');
                     },
-                  ),
-                  ImageButton(
-                    imagePath: "assets/images/tech_glossary.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/techglossary');
-                    },
-                  ),
-                  ImageButton(
-                    imagePath: "assets/images/notification.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/notification');
-                    },
-                  ),
-                  ImageButton(
-                    imagePath: "assets/images/games.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/games');
-                    },
-                  ),
-                  ImageButton(
-                    imagePath: "assets/images/community_forum.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/community');
-                    },
-                  ),
-                  ImageButton(
-                    imagePath: "assets/images/achievements.png",
-                    onTap: () {
-                      Navigator.pushNamed(context, '/achievements');
-                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 15,
+                      ),
+                    ),
+                    child: const Text(
+                      'Go to Settings (TEMPORARY TEST BUTTON)',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
                   ),
                 ],
               ),

@@ -3,6 +3,8 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../header_widget.dart'; // Import your custom header
 
 class TechGlossaryPage extends StatefulWidget {
+  const TechGlossaryPage({super.key});
+
   @override
   _TechGlossaryPageState createState() => _TechGlossaryPageState();
 }

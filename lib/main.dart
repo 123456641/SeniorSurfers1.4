@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'package:senior_surfers/settings/settings_page.dart';
 import 'welcome_page.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
@@ -15,6 +13,8 @@ import 'admin/admin_login.dart';
 import 'notification/notification.dart';
 import 'tutorial/googlemeet.dart';
 import 'progress/progress.dart';
+import 'community forum/comdboard.dart';
+import 'package:senior_surfers/settings_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
         '/dashboard': (context) => const DashboardPage(),
         '/tutorials': (context) => TutorialPage(),
         '/practice': (context) => PracticeModePage(),
-        '/settings': (context) => const SettingsPage(),
+        '/settingsD': (context) => SettingsPage(),
         '/techglossary': (context) => TechGlossaryPage(),
         '/games': (context) => const GamesPage(),
         '/admin': (context) => AdminDashboard(),
@@ -53,6 +53,7 @@ class MyApp extends StatelessWidget {
         '/notification': (context) => NotificationPage(),
         '/googlemeet': (context) => const GoogleMeetTutorialPage(),
         '/progress': (context) => const ProgressPage(),
+        '/community': (context) => const CommunityForumPage(),
       },
     );
   }
