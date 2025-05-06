@@ -15,6 +15,8 @@ import 'tutorial/googlemeet.dart';
 import 'progress/progress.dart';
 import 'community forum/comdboard.dart';
 import 'package:senior_surfers/settings_page.dart';
+import 'achievements_page.dart';
+import 'admin/admin_community.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +56,8 @@ class MyApp extends StatelessWidget {
         '/googlemeet': (context) => const GoogleMeetTutorialPage(),
         '/progress': (context) => const ProgressPage(),
         '/community': (context) => const CommunityForumPage(),
+        '/achievements': (context) => AchievementsPage(),
+        '/admincommunity': (context) => AdminCommunityScreen(),
       },
     );
   }

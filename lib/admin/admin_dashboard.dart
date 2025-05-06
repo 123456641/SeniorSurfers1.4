@@ -1,179 +1,218 @@
 import 'package:flutter/material.dart';
 
-class AdminDashboard extends StatefulWidget {
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
-  _AdminDashboardState createState() => _AdminDashboardState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Senior Surfers',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const AdminDashboard(),
+    );
+  }
+}
+
+class AdminDashboard extends StatefulWidget {
+  const AdminDashboard({Key? key}) : super(key: key);
+
+  @override
+  State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  List<Map<String, String>> glossary = [
-    {'term': 'App', 'definition': 'An application used on smartphones or tablets.'},
-    {'term': 'Browser', 'definition': 'A program to access websites like Chrome or Safari.'},
-    {'term': 'Click', 'definition': 'Pressing a button on a mouse or screen.'},
-  ];
-
-  void _addOrEditTerm({Map<String, String>? existingTerm, int? index}) {
-    final _termController = TextEditingController(text: existingTerm?['term']);
-    final _definitionController = TextEditingController(text: existingTerm?['definition']);
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(existingTerm == null ? 'Add Term' : 'Edit Term'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _termController,
-              decoration: InputDecoration(labelText: 'Term'),
-            ),
-            TextField(
-              controller: _definitionController,
-              decoration: InputDecoration(labelText: 'Definition'),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newTerm = {
-                'term': _termController.text.trim(),
-                'definition': _definitionController.text.trim(),
-              };
-              setState(() {
-                if (existingTerm == null) {
-                  glossary.add(newTerm);
-                } else if (index != null) {
-                  glossary[index] = newTerm;
-                }
-              });
-              Navigator.pop(context);
-            },
-            child: Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteTerm(int index) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Delete "${glossary[index]['term']}"?'),
-        content: Text('Are you sure you want to delete this term?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                glossary.removeAt(index);
-              });
-              Navigator.pop(context);
-            },
-            child: Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _addTechTerm() {
-    print("Add Tech Term button pressed");
-    // TODO: Show dialog or form to add a tech term
-  }
-
-  void _addNewTutorial() {
-    print("Add New Tutorial button pressed");
-    // TODO: Navigate to tutorial creation page or show dialog
-  }
-
-  void _deleteUser() {
-    print("Delete User button pressed");
-    // TODO: Show user list or search field to delete a user
-  }
+  bool _showAddTutorial = false;
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _contentController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9FB),
       appBar: AppBar(
-        title: Text('Admin Dashboard'),
+        title: const Text('Senior Surfers'),
+        backgroundColor: const Color(0xFF3B6EA5),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 16.0),
+            child: Icon(Icons.settings),
+          ),
+        ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Admin Actions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _addTechTerm,
-                  icon: Icon(Icons.library_add),
-                  label: Text("Add Tech Term"),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _addNewTutorial,
-                  icon: Icon(Icons.video_library),
-                  label: Text("Add Tutorial"),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _deleteUser,
-                  icon: Icon(Icons.person_remove),
-                  label: Text("Delete User"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-            Text(
-              'Glossary Management',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: glossary.length,
-                itemBuilder: (context, index) {
-                  final item = glossary[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(item['term']!),
-                      subtitle: Text(item['definition']!),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () =>
-                                _addOrEditTerm(existingTerm: item, index: index),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteTerm(index),
-                          ),
-                        ],
-                      ),
+        padding: const EdgeInsets.all(20.0),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Admin Dashboard',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              DashboardButton(
+                label: 'Add Tech Term',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AddTechTermScreen(),
                     ),
                   );
                 },
               ),
+              const SizedBox(height: 10),
+              DashboardButton(
+                label: 'Add Tutorial',
+                onPressed: () {
+                  setState(() {
+                    _showAddTutorial = !_showAddTutorial;
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+              DashboardButton(
+                label: 'Community Forum',
+                onPressed: () {
+                  Navigator.pushNamed(context, '/admincommunity');
+                },
+              ),
+              if (_showAddTutorial) ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Add New Tutorial',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tutorial Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _contentController,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Tutorial Content',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () {
+                    String title = _titleController.text;
+                    String content = _contentController.text;
+                    print('Saving Tutorial: $title\n$content');
+
+                    _titleController.clear();
+                    _contentController.clear();
+                    setState(() {
+                      _showAddTutorial = false;
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B6EA5),
+                  ),
+                  child: const Text('Submit Tutorial'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DashboardButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const DashboardButton({
+    Key? key,
+    required this.label,
+    required this.onPressed,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          backgroundColor: const Color(0xFF3B6EA5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12.0),
+          ),
+          elevation: 4,
+        ),
+        onPressed: onPressed,
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 18, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+class AddTechTermScreen extends StatelessWidget {
+  const AddTechTermScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final TextEditingController termController = TextEditingController();
+    final TextEditingController definitionController = TextEditingController();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Add Tech Term'),
+        backgroundColor: const Color(0xFF3B6EA5),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: termController,
+              decoration: const InputDecoration(
+                labelText: 'Tech Term',
+                border: OutlineInputBorder(),
+              ),
             ),
-            ElevatedButton.icon(
-              onPressed: () => _addOrEditTerm(),
-              icon: Icon(Icons.add),
-              label: Text('Add New Term'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: definitionController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Definition',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                String term = termController.text;
+                String definition = definitionController.text;
+
+                // TODO: Add saving logic here (e.g., save to Supabase)
+
+                print('Tech Term: $term\nDefinition: $definition');
+
+                Navigator.pop(context); // Go back to dashboard
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B6EA5),
+              ),
+              child: const Text('Submit'),
             ),
           ],
         ),

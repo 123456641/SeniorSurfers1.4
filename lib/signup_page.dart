@@ -37,7 +37,7 @@ class _SignUpPageState extends State<SignUpPage> {
     'code': 'PH',
     'name': 'Philippines',
     'dialCode': '+63',
-    'flag': '🇵🇭'
+    'flag': '🇵🇭',
   };
 
   String _passwordStrength = '';
@@ -86,7 +86,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _signUp() async {
-    FocusScope.of(context).unfocus(); // Close keyboard
+    FocusScope.of(context).unfocus();
 
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
@@ -94,10 +94,6 @@ class _SignUpPageState extends State<SignUpPage> {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
-
-    final passwordRegex = RegExp(
-      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#\$&*~]).{8,}$',
-    );
 
     if (firstName.isEmpty || !_nameRegex.hasMatch(firstName)) {
       _showSnackBar('First name must only contain letters and spaces');
@@ -114,10 +110,13 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
+    final passwordRegex = RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#\$&*~]).{8,}$',
+    );
     if (!passwordRegex.hasMatch(password)) {
       _showSnackBar(
         'Password must be at least 8 characters long and include:\n'
-        '- 1 uppercase letter\n- 1 lowercase letter\n- 1 number\n- 1 special character (e.g., !@#\$&*~)',
+        '- 1 uppercase letter\n- 1 lowercase letter\n- 1 number\n- 1 special character',
         duration: 5,
       );
       return;
@@ -126,7 +125,8 @@ class _SignUpPageState extends State<SignUpPage> {
     final phoneRegex = _getPhoneRegexForCountry(_selectedCountry['code']);
     if (!phoneRegex.hasMatch(phone)) {
       setState(() {
-        _phoneErrorText = 'Please enter a valid ${_selectedCountry['name']} phone number';
+        _phoneErrorText =
+            'Please enter a valid ${_selectedCountry['name']} phone number';
       });
       return;
     }
@@ -134,44 +134,52 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await _supabase.auth.signUp(
+      // Step 1: Sign up with auth - this creates the auth user
+      final authResponse = await _supabase.auth.signUp(
         email: email,
         password: password,
-      );
-
-      final userId = response.user?.id;
-      if (userId != null) {
-        // Insert additional user data into the 'users' table
-        final userInsertResponse = await _supabase.from('users').insert({
-          'id': userId, // Use the same UUID as the auth user
-          'email': email,
+        data: {
           'first_name': firstName,
           'last_name': lastName,
           'phone': phone,
-          'is_admin': false, // Default value
-          'created_at': DateTime.now().toUtc().toIso8601String(), // Convert to ISO8601 string
-        });
+          'email': email, // Make sure email is in the metadata
+        },
+      );
 
-        if (userInsertResponse.error == null) {
-          _showSnackBar(
-            'Account created! Please check your email to confirm.',
-            color: Colors.green,
-            duration: 4,
-          );
-          await Future.delayed(const Duration(seconds: 3));
-          Navigator.pushReplacementNamed(context, '/login');
-        } else {
-          _showSnackBar('Failed to create user profile: ${userInsertResponse.error!.message}');
-        }
+      if (authResponse.user?.id == null) {
+        throw Exception('User creation failed - no user ID returned');
       }
-    } catch (e) {
-      final errorMessage = e.toString().contains('User already registered')
-          ? 'Email already in use. Try logging in.'
-          : 'Signup failed: ${e.toString()}';
 
-      _showSnackBar(errorMessage);
+      // No need to manually insert into users table!
+      // Supabase has a "users" table trigger that automatically
+      // creates a profile when a new user signs up
+
+      // If you absolutely need to update the user profile with additional fields,
+      // use the RPC function approach which bypasses RLS
+
+      if (authResponse.session == null) {
+        _showSnackBar(
+          'Account created! Please check your email to confirm.',
+          color: Colors.green,
+          duration: 4,
+        );
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) Navigator.pushReplacementNamed(context, '/login');
+      } else {
+        if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      }
+    } on AuthException catch (e) {
+      _showSnackBar(
+        e.message.contains('User already registered')
+            ? 'Email already in use. Try logging in.'
+            : 'Signup failed: ${e.message}',
+      );
+    } on PostgrestException catch (e) {
+      _showSnackBar('Database error: ${e.message}');
+    } catch (e) {
+      _showSnackBar('An unexpected error occurred: ${e.toString()}');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -220,13 +228,18 @@ class _SignUpPageState extends State<SignUpPage> {
                   itemBuilder: (context, index) {
                     final country = _countries[index];
                     return ListTile(
-                      leading: Text(country['flag'], style: const TextStyle(fontSize: 24)),
+                      leading: Text(
+                        country['flag'],
+                        style: const TextStyle(fontSize: 24),
+                      ),
                       title: Text(country['name']),
                       trailing: Text(country['dialCode']),
                       onTap: () {
                         setState(() {
                           _selectedCountry = country;
-                          if (!_phoneController.text.startsWith(country['dialCode'])) {
+                          if (!_phoneController.text.startsWith(
+                            country['dialCode'],
+                          )) {
                             _phoneController.text = country['dialCode'];
                           }
                           _phoneErrorText = null;
@@ -266,7 +279,10 @@ class _SignUpPageState extends State<SignUpPage> {
             child: Column(
               children: [
                 const SizedBox(height: 40),
-                Image.asset('assets/images/seniorsurfersLogoNoName.png', height: 120),
+                Image.asset(
+                  'assets/images/seniorsurfersLogoNoName.png',
+                  height: 120,
+                ),
                 const SizedBox(height: 20),
                 const Text(
                   'Create an Account',
@@ -277,8 +293,12 @@ class _SignUpPageState extends State<SignUpPage> {
                 const SizedBox(height: 15),
                 _buildTextField(_lastNameController, 'Last Name'),
                 const SizedBox(height: 15),
-                _buildTextField(_emailController, 'Email Address',
-                    type: TextInputType.emailAddress, isEmail: true),
+                _buildTextField(
+                  _emailController,
+                  'Email Address',
+                  type: TextInputType.emailAddress,
+                  isEmail: true,
+                ),
                 const SizedBox(height: 15),
                 _buildPhoneField(),
                 const SizedBox(height: 15),
@@ -287,8 +307,14 @@ class _SignUpPageState extends State<SignUpPage> {
                 if (_passwordStrength.isNotEmpty)
                   Row(
                     children: [
-                      const Text('Strength: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(_passwordStrength, style: TextStyle(color: _strengthColor)),
+                      const Text(
+                        'Strength: ',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _passwordStrength,
+                        style: TextStyle(color: _strengthColor),
+                      ),
                     ],
                   ),
                 const SizedBox(height: 15),
@@ -301,15 +327,24 @@ class _SignUpPageState extends State<SignUpPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
                       minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Text('Sign Up', style: TextStyle(fontSize: 18)),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                            : const Text(
+                              'Sign Up',
+                              style: TextStyle(fontSize: 18),
+                            ),
                   ),
                 ),
                 const SizedBox(height: 80),
@@ -321,8 +356,12 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label,
-      {TextInputType type = TextInputType.text, bool isEmail = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    TextInputType type = TextInputType.text,
+    bool isEmail = false,
+  }) {
     return TextField(
       controller: controller,
       decoration: InputDecoration(
@@ -331,10 +370,12 @@ class _SignUpPageState extends State<SignUpPage> {
         border: const OutlineInputBorder(),
       ),
       keyboardType: type,
-      textCapitalization: isEmail ? TextCapitalization.none : TextCapitalization.words,
-      inputFormatters: isEmail
-          ? [] // Allow full email input
-          : [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+      textCapitalization:
+          isEmail ? TextCapitalization.none : TextCapitalization.words,
+      inputFormatters:
+          isEmail
+              ? []
+              : [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
     );
   }
 
@@ -353,7 +394,10 @@ class _SignUpPageState extends State<SignUpPage> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_selectedCountry['flag'], style: const TextStyle(fontSize: 20)),
+                Text(
+                  _selectedCountry['flag'],
+                  style: const TextStyle(fontSize: 20),
+                ),
                 const SizedBox(width: 8),
                 Text(_selectedCountry['dialCode']),
                 const Icon(Icons.arrow_drop_down),
@@ -366,9 +410,10 @@ class _SignUpPageState extends State<SignUpPage> {
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[+\d]'))],
       onChanged: (value) {
         setState(() {
-          _phoneErrorText = RegExp(r'^[+\d]+$').hasMatch(value)
-              ? null
-              : 'Only digits allowed (no letters or symbols)';
+          _phoneErrorText =
+              RegExp(r'^[+\d]+$').hasMatch(value)
+                  ? null
+                  : 'Only digits allowed (no letters or symbols)';
         });
       },
     );
@@ -384,7 +429,9 @@ class _SignUpPageState extends State<SignUpPage> {
         hintText: 'Create a secure password',
         border: const OutlineInputBorder(),
         suffixIcon: IconButton(
-          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+          icon: Icon(
+            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+          ),
           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
       ),
@@ -399,8 +446,13 @@ class _SignUpPageState extends State<SignUpPage> {
         labelText: 'Confirm Password',
         border: const OutlineInputBorder(),
         suffixIcon: IconButton(
-          icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
-          onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+          icon: Icon(
+            _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+          ),
+          onPressed:
+              () => setState(
+                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+              ),
         ),
       ),
     );
