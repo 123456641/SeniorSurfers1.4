@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:senior_surfers/settings_page.dart';
+import 'admin_techterm.dart';
+import 'admin_tutorial.dart'; // Import the Add Tutorial page
 
 void main() {
   runApp(const MyApp());
@@ -25,9 +28,10 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  bool _showAddTutorial = false;
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _contentController = TextEditingController();
+  bool _showAddTechTerm = false;
+
+  final TextEditingController _termController = TextEditingController();
+  final TextEditingController _definitionController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -36,10 +40,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
       appBar: AppBar(
         title: const Text('Senior Surfers'),
         backgroundColor: const Color(0xFF3B6EA5),
-        actions: const [
+        actions: [
           Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: Icon(Icons.settings),
+            padding: const EdgeInsets.only(right: 16.0),
+            child: IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => SettingsPage()),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -53,74 +65,80 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 'Admin Dashboard',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
+
               DashboardButton(
-                label: 'Add Tech Term',
+                label: 'Add Tutorial',
                 onPressed: () {
+                  // Navigate to the Add Tutorial page instead of showing a form
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const AddTechTermScreen(),
+                      builder: (context) => const AddTutorialPage(),
                     ),
                   );
                 },
               ),
               const SizedBox(height: 10),
+
               DashboardButton(
-                label: 'Add Tutorial',
+                label: 'Add Tech Term',
                 onPressed: () {
                   setState(() {
-                    _showAddTutorial = !_showAddTutorial;
+                    _showAddTechTerm = !_showAddTechTerm;
                   });
                 },
               ),
               const SizedBox(height: 10),
+
               DashboardButton(
                 label: 'Community Forum',
                 onPressed: () {
                   Navigator.pushNamed(context, '/admincommunity');
                 },
               ),
-              if (_showAddTutorial) ...[
+
+              // Add Tech Term Form
+              if (_showAddTechTerm) ...[
                 const SizedBox(height: 20),
                 const Text(
-                  'Add New Tutorial',
+                  'Add New Tech Term',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
                 TextField(
-                  controller: _titleController,
+                  controller: _termController,
                   decoration: const InputDecoration(
-                    labelText: 'Tutorial Title',
+                    labelText: 'Tech Term',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
-                  controller: _contentController,
-                  maxLines: 5,
+                  controller: _definitionController,
+                  maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Tutorial Content',
+                    labelText: 'Definition',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 10),
                 ElevatedButton(
                   onPressed: () {
-                    String title = _titleController.text;
-                    String content = _contentController.text;
-                    print('Saving Tutorial: $title\n$content');
+                    String term = _termController.text;
+                    String definition = _definitionController.text;
+                    print('Saving Tech Term: $term\n$definition');
 
-                    _titleController.clear();
-                    _contentController.clear();
+                    _termController.clear();
+                    _definitionController.clear();
                     setState(() {
-                      _showAddTutorial = false;
+                      _showAddTechTerm = false;
                     });
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF3B6EA5),
                   ),
-                  child: const Text('Submit Tutorial'),
+                  child: const Text('Submit Tech Term'),
                 ),
               ],
             ],
@@ -158,63 +176,6 @@ class DashboardButton extends StatelessWidget {
         child: Text(
           label,
           style: const TextStyle(fontSize: 18, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class AddTechTermScreen extends StatelessWidget {
-  const AddTechTermScreen({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final TextEditingController termController = TextEditingController();
-    final TextEditingController definitionController = TextEditingController();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Tech Term'),
-        backgroundColor: const Color(0xFF3B6EA5),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: termController,
-              decoration: const InputDecoration(
-                labelText: 'Tech Term',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: definitionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Definition',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                String term = termController.text;
-                String definition = definitionController.text;
-
-                // TODO: Add saving logic here (e.g., save to Supabase)
-
-                print('Tech Term: $term\nDefinition: $definition');
-
-                Navigator.pop(context); // Go back to dashboard
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3B6EA5),
-              ),
-              child: const Text('Submit'),
-            ),
-          ],
         ),
       ),
     );

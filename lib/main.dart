@@ -17,6 +17,9 @@ import 'community forum/comdboard.dart';
 import 'package:senior_surfers/settings_page.dart';
 import 'achievements_page.dart';
 import 'admin/admin_community.dart';
+import 'admin/admin_techterm.dart';
+import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetDashboard.dart';
+import 'admin/admin_tutorial.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +61,9 @@ class MyApp extends StatelessWidget {
         '/community': (context) => const CommunityForumPage(),
         '/achievements': (context) => AchievementsPage(),
         '/admincommunity': (context) => AdminCommunityScreen(),
+        '/AddTechTermScreen': (context) => const AdminTechTermsPage(),
+        'gmeetDashboard': (context) => const GmeetDashboard1(),
+        '/admintutorial': (context) => const AddTutorialPage(),
       },
     );
   }

@@ -20,7 +20,10 @@ class GoogleMeetPage extends StatelessWidget {
             body: SafeArea(
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -64,16 +67,28 @@ class GoogleMeetPage extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
-                          CircleAvatar(radius: 6, backgroundColor: Colors.pinkAccent),
+                          CircleAvatar(
+                            radius: 6,
+                            backgroundColor: Colors.pinkAccent,
+                          ),
                           SizedBox(width: 8),
-                          CircleAvatar(radius: 6, backgroundColor: Color(0xFF6f3a3a)),
+                          CircleAvatar(
+                            radius: 6,
+                            backgroundColor: Color(0xFF6f3a3a),
+                          ),
                           SizedBox(width: 8),
-                          CircleAvatar(radius: 6, backgroundColor: Color(0xFF6f3a3a)),
+                          CircleAvatar(
+                            radius: 6,
+                            backgroundColor: Color(0xFF6f3a3a),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 48),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1f1918),
                           borderRadius: BorderRadius.circular(999),
@@ -113,7 +128,10 @@ class GoogleMeetPage extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            const Icon(FontAwesomeIcons.chevronDown, color: Color(0xFFb9a9a7)),
+                            const Icon(
+                              FontAwesomeIcons.chevronDown,
+                              color: Color(0xFFb9a9a7),
+                            ),
                           ],
                         ),
                       ),
@@ -131,15 +149,21 @@ class GoogleMeetPage extends StatelessWidget {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const gmeetDashboard()),
+                            MaterialPageRoute(
+                              builder: (context) => const GmeetDashboard1(),
+                            ),
                           );
                         },
+
                         child: const Text("Continue as Boluntate,"),
                       ),
                       const SizedBox(height: 20),
                       const Text(
                         "Use Meet without an account",
-                        style: TextStyle(color: Colors.pinkAccent, fontSize: 16),
+                        style: TextStyle(
+                          color: Colors.pinkAccent,
+                          fontSize: 16,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -154,7 +178,10 @@ class GoogleMeetPage extends StatelessWidget {
                                 fontSize: 14,
                               ),
                             ),
-                            TextSpan(text: ', ', style: TextStyle(color: Colors.pinkAccent)),
+                            TextSpan(
+                              text: ', ',
+                              style: TextStyle(color: Colors.pinkAccent),
+                            ),
                             TextSpan(
                               text: 'Contract summary',
                               style: TextStyle(
@@ -163,7 +190,10 @@ class GoogleMeetPage extends StatelessWidget {
                                 fontSize: 14,
                               ),
                             ),
-                            TextSpan(text: ' and ', style: TextStyle(color: Colors.pinkAccent)),
+                            TextSpan(
+                              text: ' and ',
+                              style: TextStyle(color: Colors.pinkAccent),
+                            ),
                             TextSpan(
                               text: 'Privacy policy',
                               style: TextStyle(

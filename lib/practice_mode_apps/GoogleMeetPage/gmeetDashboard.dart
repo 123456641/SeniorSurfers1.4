@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-class gmeetDashboard extends StatelessWidget {
-  const gmeetDashboard({Key? key}) : super(key: key);
+class GmeetDashboard1 extends StatelessWidget {
+  const GmeetDashboard1({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,20 +19,53 @@ class gmeetDashboard extends StatelessWidget {
                 children: [
                   Row(
                     children: const [
-                      Text("5:14", style: TextStyle(fontSize: 12, color: Color(0xFFd9c7c7), fontWeight: FontWeight.bold)),
+                      Text(
+                        "5:14",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFd9c7c7),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       SizedBox(width: 4),
-                      Icon(FontAwesomeIcons.commentAlt, size: 12, color: Color(0xFFd9c7c7)),
+                      Icon(
+                        FontAwesomeIcons.commentAlt,
+                        size: 12,
+                        color: Color(0xFFd9c7c7),
+                      ),
                       SizedBox(width: 4),
-                      Text("...", style: TextStyle(fontSize: 12, color: Color(0xFFd9c7c7), fontWeight: FontWeight.bold)),
+                      Text(
+                        "...",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFd9c7c7),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                   Row(
                     children: [
-                      const Icon(FontAwesomeIcons.moon, size: 12, color: Color(0xFFd9c7c7)),
+                      const Icon(
+                        FontAwesomeIcons.moon,
+                        size: 12,
+                        color: Color(0xFFd9c7c7),
+                      ),
                       const SizedBox(width: 4),
-                      const Icon(FontAwesomeIcons.bellSlash, size: 12, color: Color(0xFFd9c7c7)),
+                      const Icon(
+                        FontAwesomeIcons.bellSlash,
+                        size: 12,
+                        color: Color(0xFFd9c7c7),
+                      ),
                       const SizedBox(width: 4),
-                      const Text("5G", style: TextStyle(fontSize: 8, color: Color(0xFFd9c7c7), fontWeight: FontWeight.w900)),
+                      const Text(
+                        "5G",
+                        style: TextStyle(
+                          fontSize: 8,
+                          color: Color(0xFFd9c7c7),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       Container(
                         width: 20,
@@ -43,10 +76,21 @@ class gmeetDashboard extends StatelessWidget {
                           color: const Color(0xFF0f1a0f),
                         ),
                         alignment: Alignment.center,
-                        child: const Text("19", style: TextStyle(fontSize: 10, color: Color(0xFFa3d97a), fontWeight: FontWeight.w600)),
+                        child: const Text(
+                          "19",
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFFa3d97a),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(FontAwesomeIcons.bolt, size: 12, color: Color(0xFFd9c7c7)),
+                      const Icon(
+                        FontAwesomeIcons.bolt,
+                        size: 12,
+                        color: Color(0xFFd9c7c7),
+                      ),
                     ],
                   ),
                 ],
@@ -57,7 +101,10 @@ class gmeetDashboard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4f3a44),
                   borderRadius: BorderRadius.circular(999),
@@ -68,7 +115,10 @@ class gmeetDashboard extends StatelessWidget {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: TextField(
-                        style: TextStyle(color: Color(0xFFd9c7c7), fontSize: 18),
+                        style: TextStyle(
+                          color: Color(0xFFd9c7c7),
+                          fontSize: 18,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Search contacts',
                           hintStyle: TextStyle(color: Color(0xFFd9c7c7)),
@@ -78,16 +128,29 @@ class gmeetDashboard extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF7f4a5a),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
                         children: const [
-                          Icon(FontAwesomeIcons.keyboard, size: 14, color: Color(0xFFd9c7c7)),
+                          Icon(
+                            FontAwesomeIcons.keyboard,
+                            size: 14,
+                            color: Color(0xFFd9c7c7),
+                          ),
                           SizedBox(width: 4),
-                          Text("Code", style: TextStyle(color: Color(0xFFd9c7c7), fontSize: 12)),
+                          Text(
+                            "Code",
+                            style: TextStyle(
+                              color: Color(0xFFd9c7c7),
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -102,7 +165,7 @@ class gmeetDashboard extends StatelessWidget {
                       alignment: Alignment.center,
                       child: ClipOval(
                         child: Image.asset(
-                          'assets/images/elderpfp.png', // Path to your profile picture
+                          'assets/images/elderpfp.png',
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
@@ -119,7 +182,14 @@ class gmeetDashboard extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text("Meetings", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFd9c7c7))),
+                child: Text(
+                  "Meetings",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFd9c7c7),
+                  ),
+                ),
               ),
             ),
 
@@ -139,25 +209,47 @@ class gmeetDashboard extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(FontAwesomeIcons.calendarAlt, color: Color(0xFFd9c7c7)),
+                        child: const Icon(
+                          FontAwesomeIcons.calendarAlt,
+                          color: Color(0xFFd9c7c7),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
-                          Text("Wellness Meeting", style: TextStyle(color: Color(0xFFd9c7c7), fontSize: 16)),
-                          Text("8-10 am", style: TextStyle(color: Color(0xFFd9c7c7), fontSize: 13, fontWeight: FontWeight.w300)),
+                          Text(
+                            "Wellness Meeting",
+                            style: TextStyle(
+                              color: Color(0xFFd9c7c7),
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            "8-10 am",
+                            style: TextStyle(
+                              color: Color(0xFFd9c7c7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w300,
+                            ),
+                          ),
                         ],
                       ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFf4a6b0),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const Text("Now", style: TextStyle(color: Color(0xFF4f3a44), fontSize: 12)),
+                    child: const Text(
+                      "Now",
+                      style: TextStyle(color: Color(0xFF4f3a44), fontSize: 12),
+                    ),
                   ),
                 ],
               ),

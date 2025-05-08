@@ -1,11 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'header_widget.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'login_page.dart';
 import 'dart:async';
 
 class SettingsPage extends StatefulWidget {
@@ -329,8 +327,11 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () async {
                 await supabase.auth.signOut();
                 if (mounted) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => LoginPagee()),
+                  // Navigate back to the Welcome Page and clear the navigation stack
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/',
+                    (route) => false,
                   );
                 }
               },
