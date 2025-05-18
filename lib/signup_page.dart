@@ -13,8 +13,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController =
-      TextEditingController(); // Now stores only the number part
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -47,7 +46,6 @@ class _SignUpPageState extends State<SignUpPage> {
   @override
   void initState() {
     super.initState();
-    // Don't set dial code in the text controller anymore
   }
 
   void _checkPasswordStrength(String password) {
@@ -93,7 +91,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final lastName = _lastNameController.text.trim();
     final email = _emailController.text.trim();
     final phone =
-        "${_selectedCountry['dialCode']}${_phoneController.text.trim()}"; // Combine dial code and number
+        "${_selectedCountry['dialCode']}${_phoneController.text.trim()}";
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
@@ -210,74 +208,78 @@ class _SignUpPageState extends State<SignUpPage> {
   Future<void> _showCountryPicker() async {
     await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Container(
-          height: 300,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(10),
+        // Making bottom sheet responsive
+        return FractionallySizedBox(
+          heightFactor: MediaQuery.of(context).size.height > 600 ? 0.5 : 0.7,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Select Country',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _countries.length,
-                  itemBuilder: (context, index) {
-                    final country = _countries[index];
-                    return Card(
-                      elevation: 0,
-                      color:
-                          _selectedCountry['code'] == country['code']
-                              ? Colors.blue.shade50
-                              : null,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(
-                          color:
-                              _selectedCountry['code'] == country['code']
-                                  ? Colors.blue
-                                  : Colors.transparent,
-                          width: 1,
-                        ),
-                      ),
-                      margin: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
-                      ),
-                      child: ListTile(
-                        leading: Text(
-                          country['flag'],
-                          style: const TextStyle(fontSize: 24),
-                        ),
-                        title: Text(country['name']),
-                        trailing: Text(country['dialCode']),
-                        onTap: () {
-                          setState(() {
-                            _selectedCountry = country;
-                            _phoneErrorText = null;
-                          });
-                          Navigator.pop(context);
-                        },
-                      ),
-                    );
-                  },
+                const SizedBox(height: 16),
+                const Text(
+                  'Select Country',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _countries.length,
+                    itemBuilder: (context, index) {
+                      final country = _countries[index];
+                      return Card(
+                        elevation: 0,
+                        color:
+                            _selectedCountry['code'] == country['code']
+                                ? Colors.blue.shade50
+                                : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                            color:
+                                _selectedCountry['code'] == country['code']
+                                    ? Colors.blue
+                                    : Colors.transparent,
+                            width: 1,
+                          ),
+                        ),
+                        margin: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 8,
+                        ),
+                        child: ListTile(
+                          leading: Text(
+                            country['flag'],
+                            style: const TextStyle(fontSize: 24),
+                          ),
+                          title: Text(country['name']),
+                          trailing: Text(country['dialCode']),
+                          onTap: () {
+                            setState(() {
+                              _selectedCountry = country;
+                              _phoneErrorText = null;
+                            });
+                            Navigator.pop(context);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -297,6 +299,10 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get the screen width to determine layout
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isTabletOrDesktop = screenWidth > 600;
+
     return Scaffold(
       backgroundColor: Colors.lightBlue.shade50,
       appBar: AppBar(
@@ -308,45 +314,64 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 20),
-                  Image.asset(
-                    'assets/images/seniorsurfersLogoNoName.png',
-                    height: 100,
+        child: Center(
+          child: SingleChildScrollView(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Responsive container width
+                double containerWidth = screenWidth;
+                if (isTabletOrDesktop) {
+                  containerWidth = screenWidth * 0.8;
+                  if (screenWidth > 1200) {
+                    containerWidth = 900; // Max width for very large screens
+                  }
+                }
+
+                return Container(
+                  width: containerWidth,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTabletOrDesktop ? 24.0 : 16.0,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Create an Account',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 20),
+                      Image.asset(
+                        'assets/images/seniorsurfersLogoNoName.png',
+                        height: 100,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Create an Account',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Join our community of active seniors',
+                        style: TextStyle(fontSize: 16, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 30),
+                      _buildInputCard(isTabletOrDesktop),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Join our community of active seniors',
-                    style: TextStyle(fontSize: 16, color: Colors.black54),
-                  ),
-                  const SizedBox(height: 30),
-                  _buildInputCard(),
-                ],
-              ),
+                );
+              },
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildInputCard() {
+  Widget _buildInputCard(bool isTabletOrDesktop) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(isTabletOrDesktop ? 24.0 : 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -355,17 +380,7 @@ class _SignUpPageState extends State<SignUpPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(_firstNameController, 'First Name'),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildTextField(_lastNameController, 'Last Name'),
-                ),
-              ],
-            ),
+            _buildNameFields(isTabletOrDesktop),
             const SizedBox(height: 15),
             _buildTextField(
               _emailController,
@@ -433,22 +448,46 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Already have an account?'),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                  child: const Text('Log In'),
-                ),
-              ],
+            Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Already have an account?'),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    },
+                    child: const Text('Log In'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  // Responsive name fields that stack on mobile and display side by side on larger screens
+  Widget _buildNameFields(bool isTabletOrDesktop) {
+    if (isTabletOrDesktop) {
+      return Row(
+        children: [
+          Expanded(child: _buildTextField(_firstNameController, 'First Name')),
+          const SizedBox(width: 12),
+          Expanded(child: _buildTextField(_lastNameController, 'Last Name')),
+        ],
+      );
+    } else {
+      return Column(
+        children: [
+          _buildTextField(_firstNameController, 'First Name'),
+          const SizedBox(height: 15),
+          _buildTextField(_lastNameController, 'Last Name'),
+        ],
+      );
+    }
   }
 
   Widget _buildTextField(
@@ -531,7 +570,7 @@ class _SignUpPageState extends State<SignUpPage> {
       ], // Only digits
       onChanged: (value) {
         // Validate phone number format for the selected country
-        final phoneRegex = _getPhoneRegexForCountry(_selectedCountry['code'])
+        _getPhoneRegexForCountry(_selectedCountry['code'])
             .toString()
             .replaceAll(r'^\+\d+', '') // Remove dial code part from regex
             .replaceAll(r'$', ''); // Remove end anchor

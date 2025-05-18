@@ -42,16 +42,19 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         print('Login successful for: ${user.email}');
 
         // Query the users table to check admin status
-        final adminCheck = await Supabase.instance.client
-            .from('users')
-            .select('is_admin')
-            .eq('email', user.email!.trim().toLowerCase())
-            .maybeSingle();
+        final adminCheck =
+            await Supabase.instance.client
+                .from('users')
+                .select('is_admin')
+                .eq('email', user.email!.trim().toLowerCase())
+                .maybeSingle();
 
         print('Admin check result: $adminCheck');
 
-        final isAdmin = adminCheck != null &&
-                        (adminCheck['is_admin'] == true || adminCheck['is_admin'].toString().toLowerCase() == 'true');
+        final isAdmin =
+            adminCheck != null &&
+            (adminCheck['is_admin'] == true ||
+                adminCheck['is_admin'].toString().toLowerCase() == 'true');
 
         if (isAdmin) {
           print('User is an admin, navigating to /admin');
@@ -88,18 +91,16 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen size for responsive layouts
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+
     return Scaffold(
-      appBar: HeaderWidget(
-        title: 'Admin Login',
-        showBackButton: false,
-      ),
+      appBar: HeaderWidget(title: 'Admin Login', showBackButton: false),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            'assets/images/bgdesign_welcome.png',
-            fit: BoxFit.cover,
-          ),
+          Image.asset('assets/images/bgdesign_welcome.png', fit: BoxFit.cover),
           Container(color: Colors.black.withOpacity(0.3)),
           Center(
             child: SingleChildScrollView(
@@ -109,86 +110,103 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                margin: const EdgeInsets.symmetric(horizontal: 24),
+                // Responsive margins based on screen size
+                margin: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 16 : screenSize.width * 0.2,
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Admin Login',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2C3E50),
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      TextField(
-                        controller: _usernameController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  // Responsive padding based on screen size
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSmallScreen ? 16 : 32,
+                    vertical: isSmallScreen ? 24 : 40,
+                  ),
+                  child: ConstrainedBox(
+                    // Constraining max width for web view
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Admin Login',
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 24 : 28,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2C3E50),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                        SizedBox(height: isSmallScreen ? 20 : 30),
+                        TextField(
+                          controller: _usernameController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: const Icon(Icons.person),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 30),
-                      _isLoading
-                          ? const CircularProgressIndicator()
-                          : ElevatedButton(
-                              onPressed: _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2C3E50),
-                                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
+                        SizedBox(height: isSmallScreen ? 16 : 20),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: isSmallScreen ? 24 : 30),
+                        _isLoading
+                            ? const CircularProgressIndicator()
+                            : SizedBox(
+                              // Make button width responsive
+                              width: isSmallScreen ? double.infinity : 200,
+                              height: isSmallScreen ? 50 : 55,
+                              child: ElevatedButton(
+                                onPressed: _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2C3E50),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Login',
+                                  style: TextStyle(
+                                    fontSize: isSmallScreen ? 15 : 16,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                              child: const Text(
-                                'Login',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
+                            ),
+                        if (_errorMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: Text(
+                              _errorMessage!,
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: isSmallScreen ? 14 : 16,
                               ),
                             ),
-                      if (_errorMessage != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 16,
-                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -197,5 +215,12 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }

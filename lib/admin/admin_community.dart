@@ -1,5 +1,3 @@
-//community forum page for admin moderation
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -578,8 +576,26 @@ class _AdminCommunityScreenState extends State<AdminCommunityScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Community Moderation'),
-        backgroundColor: const Color(0xFF3B6EA5),
+        automaticallyImplyLeading: false, // Removes the back button
+        title: const Padding(
+          padding: EdgeInsets.only(bottom: 28.0, top: 28.0),
+          child: Text(
+            'Community Moderation',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF27445D),
+            ),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Refresh Data',
+          ),
+          const SizedBox(width: 16),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,

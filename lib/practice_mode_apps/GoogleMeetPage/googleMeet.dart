@@ -8,18 +8,7 @@ class GoogleMeetPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        toolbarHeight: 80,
-        flexibleSpace: const HeaderWidget(),
-      ),
+      appBar: HeaderWidget(),
       body: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -41,7 +30,7 @@ class GoogleMeetPage extends StatelessWidget {
                   fontSize: 45,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Roboto',
-                  color: Color(0xFF1A73E8),
+                  color: Color(0xFF27445D),
                   letterSpacing: -0.5,
                 ),
                 textAlign: TextAlign.left,

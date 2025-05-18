@@ -1,5 +1,3 @@
-//admin_tutorial.dart
-
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -8,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../tutorial/pdf_viewer_page.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AddTutorialPage extends StatefulWidget {
   const AddTutorialPage({super.key});
@@ -23,14 +22,20 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   bool isUploading = false;
   String? selectedPlatform;
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
+  final TextEditingController _fileDescriptionController =
+      TextEditingController();
 
   // File upload related variables
   PlatformFile? _selectedFileInfo;
   String? _fileName;
-  final TextEditingController _fileDescriptionController =
-      TextEditingController();
+  bool isPreviewingFile = false;
+
+  // Thumbnail image related variables
+  PlatformFile? _selectedThumbnailInfo;
+  String? _thumbnailName;
+  String? _thumbnailUrl;
+  bool isUploadingThumbnail = false;
 
   @override
   void initState() {
@@ -41,7 +46,6 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   @override
   void dispose() {
     _titleController.dispose();
-    _descriptionController.dispose();
     _linkController.dispose();
     _fileDescriptionController.dispose();
     super.dispose();
@@ -80,28 +84,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
           content: Text('Please provide a title and select a platform'),
         ),
       );
-      // In _addNewTutorial method, after successful upload, add:
-      if (_selectedFileInfo != null) {
-        final String notificationTitle = 'New Tutorial File Available';
-        final String notificationBody =
-            'A new tutorial "${_titleController.text}" has been uploaded with file "${_selectedFileInfo!.name}".';
-
-        // Send local notification
-        _sendNotification(notificationTitle, notificationBody);
-
-        // Save to database for all users to see
-        await _saveNotificationToDatabase(notificationTitle, notificationBody);
-      } else if (_linkController.text.isNotEmpty) {
-        final String notificationTitle = 'New Tutorial Link Available';
-        final String notificationBody =
-            'A new tutorial "${_titleController.text}" has been added.';
-
-        // Send local notification
-        _sendNotification(notificationTitle, notificationBody);
-
-        // Save to database for all users to see
-        await _saveNotificationToDatabase(notificationTitle, notificationBody);
-      }
+      return;
     }
 
     setState(() {
@@ -110,6 +93,11 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
     });
 
     try {
+      // Upload thumbnail if selected
+      if (_selectedThumbnailInfo != null) {
+        await _uploadThumbnail();
+      }
+
       // If we have a selected file, upload it
       if (_selectedFileInfo != null) {
         await _uploadFile();
@@ -120,26 +108,39 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
           'file_type': 'link',
           'file_size': 0,
           'file_url': _linkController.text,
-          'description': _descriptionController.text,
+          'description': _fileDescriptionController.text,
           'platform': selectedPlatform,
           'uploaded_at': DateTime.now().toIso8601String(),
           'user_id': _supabase.auth.currentUser?.id,
+          'thumbnail_url': _thumbnailUrl,
         });
-        _sendNotification(
-          'File Uploaded',
-          'The file "${_selectedFileInfo!.name}" has been uploaded successfully.',
-        );
       }
 
+      // Create notification
+      final String notificationTitle = 'New Tutorial Available';
+      final String notificationBody =
+          _selectedFileInfo != null
+              ? 'A new tutorial "${_titleController.text}" has been uploaded with file "${_selectedFileInfo!.name}".'
+              : 'A new tutorial "${_titleController.text}" has been added.';
+
+      // Send local notification
+      _sendNotification(notificationTitle, notificationBody);
+
+      // Save to database for all users to see
+      await _saveNotificationToDatabase(notificationTitle, notificationBody);
+
       _titleController.clear();
-      _descriptionController.clear();
       _linkController.clear();
       setState(() {
         selectedPlatform = null;
         _selectedFileInfo = null;
         _fileName = null;
+        _selectedThumbnailInfo = null;
+        _thumbnailName = null;
+        _thumbnailUrl = null;
         isUploading = false;
         isLoading = false;
+        isPreviewingFile = false;
       });
       _fileDescriptionController.clear();
 
@@ -179,6 +180,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
         setState(() {
           _selectedFileInfo = result.files.first;
           _fileName = _selectedFileInfo!.name;
+          isPreviewingFile = false; // Reset preview state
         });
 
         print('Selected file: ${_selectedFileInfo!.name}');
@@ -204,6 +206,234 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
           context,
         ).showSnackBar(SnackBar(content: Text('File picking error: $e')));
       }
+    }
+  }
+
+  // Function to preview the selected file
+  Future<void> _previewFile() async {
+    if (_selectedFileInfo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No file selected to preview')),
+      );
+      return;
+    }
+
+    try {
+      setState(() {
+        isPreviewingFile = true;
+      });
+
+      // For PDF preview on web
+      if (kIsWeb &&
+          _selectedFileInfo!.extension?.toLowerCase() == 'pdf' &&
+          _selectedFileInfo!.bytes != null) {
+        final blobUrl =
+            Uri.dataFromBytes(
+              _selectedFileInfo!.bytes!,
+              mimeType: 'application/pdf',
+            ).toString();
+
+        await launchUrl(Uri.parse(blobUrl));
+      }
+      // For native platforms (if file is a PDF)
+      else if (!kIsWeb &&
+          _selectedFileInfo!.path != null &&
+          _selectedFileInfo!.extension?.toLowerCase() == 'pdf') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) => PDFViewerPage(
+                  title: _selectedFileInfo!.name,
+                  fileUrl: _selectedFileInfo!.path!,
+                  requiresAuth: false,
+                ),
+          ),
+        );
+      }
+      // For other file types or when PDF viewing is not possible
+      else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Preview not available for ${_selectedFileInfo!.extension} files or on this platform.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error previewing file: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error previewing file: $e')));
+    } finally {
+      setState(() {
+        isPreviewingFile = false;
+      });
+    }
+  }
+
+  // Function to pick thumbnail image
+  Future<void> _pickThumbnail() async {
+    if (!mounted) return;
+
+    try {
+      await Future.delayed(Duration.zero);
+
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          _selectedThumbnailInfo = result.files.first;
+          _thumbnailName = _selectedThumbnailInfo!.name;
+        });
+
+        print('Selected thumbnail: ${_selectedThumbnailInfo!.name}');
+        print('Thumbnail size: ${_selectedThumbnailInfo!.size} bytes');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Thumbnail selected: ${_selectedThumbnailInfo!.name}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error picking thumbnail: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Thumbnail picking error: $e')));
+      }
+    }
+  }
+
+  // Function to upload thumbnail to Supabase storage
+  Future<void> _uploadThumbnail() async {
+    if (_selectedThumbnailInfo == null) {
+      print('No thumbnail selected');
+      return;
+    }
+
+    setState(() {
+      isUploadingThumbnail = true;
+    });
+
+    try {
+      final fileExtension =
+          _selectedThumbnailInfo!.name.split('.').last.toLowerCase();
+      final fileName =
+          'thumbnail_${DateTime.now().millisecondsSinceEpoch}_${_selectedThumbnailInfo!.name}';
+      final filePath = 'tutorial-thumbnails/$fileName';
+
+      print('Starting upload of thumbnail: ${_selectedThumbnailInfo!.name}');
+      print('Uploading thumbnail to: $filePath');
+
+      // Determine proper content type based on file extension
+      String contentType;
+      switch (fileExtension) {
+        case 'jpg':
+        case 'jpeg':
+          contentType = 'image/jpeg';
+          break;
+        case 'png':
+          contentType = 'image/png';
+          break;
+        case 'webp':
+          contentType = 'image/webp';
+          break;
+        default:
+          contentType = 'image/jpeg';
+      }
+
+      String uploadResponse;
+
+      // Upload logic based on platform
+      if (kIsWeb) {
+        // Web platform - always use bytes
+        if (_selectedThumbnailInfo!.bytes != null) {
+          uploadResponse = await _supabase.storage
+              .from('tutorial-thumbnails')
+              .uploadBinary(
+                filePath,
+                _selectedThumbnailInfo!.bytes!,
+                fileOptions: FileOptions(
+                  contentType: contentType,
+                  upsert: true,
+                ),
+              );
+        } else {
+          throw Exception('Thumbnail bytes are null for web upload');
+        }
+      } else {
+        // Native platforms - try path first, fallback to bytes
+        if (_selectedThumbnailInfo!.path != null) {
+          final file = File(_selectedThumbnailInfo!.path!);
+          if (await file.exists()) {
+            uploadResponse = await _supabase.storage
+                .from('tutorial-thumbnails')
+                .upload(
+                  filePath,
+                  file,
+                  fileOptions: FileOptions(
+                    contentType: contentType,
+                    upsert: true,
+                  ),
+                );
+          } else {
+            throw Exception(
+              'Thumbnail file does not exist at the specified path',
+            );
+          }
+        } else if (_selectedThumbnailInfo!.bytes != null) {
+          // Fallback to bytes if path is not available
+          uploadResponse = await _supabase.storage
+              .from('tutorial-thumbnails')
+              .uploadBinary(
+                filePath,
+                _selectedThumbnailInfo!.bytes!,
+                fileOptions: FileOptions(
+                  contentType: contentType,
+                  upsert: true,
+                ),
+              );
+        } else {
+          throw Exception(
+            'Neither thumbnail path nor bytes are available for upload',
+          );
+        }
+      }
+
+      print('Thumbnail upload response: $uploadResponse');
+
+      // Get the public URL for the uploaded thumbnail
+      _thumbnailUrl = _supabase.storage
+          .from('tutorial-thumbnails')
+          .getPublicUrl(filePath);
+
+      print('Thumbnail uploaded successfully. URL: $_thumbnailUrl');
+
+      setState(() {
+        isUploadingThumbnail = false;
+      });
+    } catch (e) {
+      print('Error during thumbnail upload: $e');
+      setState(() {
+        isUploadingThumbnail = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading thumbnail: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -342,6 +572,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
         'platform': selectedPlatform,
         'uploaded_at': DateTime.now().toIso8601String(),
         'user_id': _supabase.auth.currentUser?.id,
+        'thumbnail_url': _thumbnailUrl, // Add the thumbnail URL
       });
 
       setState(() {
@@ -385,6 +616,11 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
     });
 
     try {
+      // Upload thumbnail if selected
+      if (_selectedThumbnailInfo != null) {
+        await _uploadThumbnail();
+      }
+
       // Upload file directly to tutorial_files table
       await _uploadFile();
 
@@ -400,13 +636,16 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
       await _saveNotificationToDatabase(notificationTitle, notificationBody);
 
       _titleController.clear();
-      _descriptionController.clear();
       setState(() {
         selectedPlatform = null;
         _selectedFileInfo = null;
         _fileName = null;
+        _selectedThumbnailInfo = null;
+        _thumbnailName = null;
+        _thumbnailUrl = null;
         isLoading = false;
         isUploading = false;
+        isPreviewingFile = false;
       });
       _fileDescriptionController.clear();
 
@@ -518,6 +757,22 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
         ]);
       }
 
+      // Delete thumbnail if exists
+      if (file['thumbnail_url'] != null) {
+        final thumbnailPath =
+            file['thumbnail_url'].toString().split('tutorial-thumbnails/').last;
+        if (thumbnailPath.isNotEmpty) {
+          try {
+            await _supabase.storage.from('tutorial-thumbnails').remove([
+              thumbnailPath,
+            ]);
+            print('Thumbnail deleted: $thumbnailPath');
+          } catch (e) {
+            print('Error deleting thumbnail: $e');
+          }
+        }
+      }
+
       // Delete from database
       await _supabase.from('tutorial_files').delete().eq('id', file['id']);
 
@@ -536,11 +791,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FB),
-      appBar: AppBar(
-        title: const Text('Senior Surfers'),
-        backgroundColor: const Color(0xFF3B6EA5),
-      ),
+      backgroundColor: const Color(0xFFF8F8FF), // Ghost white color
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child:
@@ -552,11 +803,15 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Add Tutorial or File',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 24.0),
+                        child: Text(
+                          'Add Tutorial or File',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF27445D),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -576,22 +831,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Description',
-                          border: OutlineInputBorder(),
-                        ),
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _linkController,
-                        decoration: const InputDecoration(
-                          labelText: 'Link (Optional)',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
+
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _showPlatformSelectionDialog,
@@ -608,7 +848,102 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                       ),
                       const SizedBox(height: 24),
                       const Text(
-                        'Upload File (Optional)',
+                        'Tutorial Thumbnail Image',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _pickThumbnail,
+                              icon: const Icon(Icons.image),
+                              label: Text(
+                                _thumbnailName ??
+                                    'Select Thumbnail Image (JPG, PNG)',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.all(16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_selectedThumbnailInfo != null) ...[
+                        const SizedBox(height: 8),
+                        Card(
+                          color: const Color(0xFFEBF2FA),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            side: const BorderSide(
+                              color: Color(0xFF3B6EA5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.image,
+                                      color: Color(0xFF3B6EA5),
+                                      size: 28,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Selected Thumbnail: ${_selectedThumbnailInfo!.name}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedThumbnailInfo = null;
+                                          _thumbnailName = null;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Size: ${_formatFileSize(_selectedThumbnailInfo!.size)}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                const SizedBox(height: 8),
+                                if (_selectedThumbnailInfo != null &&
+                                    _selectedThumbnailInfo!.bytes != null &&
+                                    kIsWeb) ...[
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      _selectedThumbnailInfo!.bytes!,
+                                      height: 150,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Tutorial File',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
@@ -620,15 +955,28 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: _pickFile,
-                              icon: const Icon(Icons.attach_file),
+                              icon: const Icon(Icons.file_upload),
                               label: Text(
-                                _fileName ?? 'Select PDF, PPT, or Document',
+                                _fileName ?? 'Select File (PDF, PPT, DOC)',
                               ),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.all(16),
                               ),
                             ),
                           ),
+                          if (_selectedFileInfo != null) ...[
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                setState(() {
+                                  _selectedFileInfo = null;
+                                  _fileName = null;
+                                });
+                              },
+                              tooltip: 'Remove File',
+                            ),
+                          ],
                         ],
                       ),
                       if (_selectedFileInfo != null) ...[
@@ -650,13 +998,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                               children: [
                                 Row(
                                   children: [
-                                    Icon(
-                                      _getFileIcon(
-                                        _selectedFileInfo!.name.split('.').last,
-                                      ),
-                                      color: const Color(0xFF3B6EA5),
-                                      size: 28,
-                                    ),
+                                    _getFileIcon(_selectedFileInfo!.extension),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
@@ -668,250 +1010,66 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close, size: 20),
-                                      onPressed: () {
-                                        setState(() {
-                                          _selectedFileInfo = null;
-                                          _fileName = null;
-                                        });
-                                      },
-                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Size: ${_formatFileSize(_selectedFileInfo!.size)}',
+                                  'Type: ${_selectedFileInfo!.extension?.toUpperCase() ?? 'Unknown'}',
                                   style: const TextStyle(fontSize: 14),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 4),
                                 Text(
-                                  'Ready to upload',
-                                  style: const TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  'Size: ${_formatFileSize(_selectedFileInfo!.size)}',
+                                  style: const TextStyle(fontSize: 14),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _fileDescriptionController,
-                          decoration: const InputDecoration(
-                            labelText: 'File Description (Optional)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
                       ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _fileDescriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'File Description',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 3,
+                      ),
                       const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: isUploading ? null : _addNewTutorial,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3B6EA5),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16.0,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                elevation: 4,
-                              ),
-                              child:
-                                  isUploading
-                                      ? const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2.0,
-                                            ),
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'UPLOADING...',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                      : const Text(
-                                        'SAVE TUTORIAL',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18,
-                                        ),
-                                      ),
-                            ),
-                          ),
-                          if (_selectedFileInfo != null) ...[
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: isUploading ? null : _addFileOnly,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2E8B57),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16.0,
+                      ElevatedButton.icon(
+                        onPressed: isUploading ? null : _addNewTutorial,
+                        icon:
+                            isUploading
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12.0),
-                                  ),
-                                  elevation: 4,
-                                ),
-                                child:
-                                    isUploading
-                                        ? const Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                color: Colors.white,
-                                                strokeWidth: 2.0,
-                                              ),
-                                            ),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'UPLOADING...',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                        : const Text(
-                                          'UPLOAD FILE ONLY',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                              ),
-                            ),
-                          ],
-                        ],
+                                )
+                                : const Icon(Icons.add),
+                        label: Text(
+                          isUploading ? 'Uploading...' : 'Add Tutorial',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.all(16),
+                          backgroundColor: const Color(0xFF2A9D8F),
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 32),
                       const Text(
-                        'Current Files',
+                        'Existing Tutorials & Files',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
+                          color: Color(0xFF27445D),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      tutorialFiles.isEmpty
-                          ? const Center(
-                            child: Text(
-                              'No files available yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          )
-                          : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: tutorialFiles.length,
-                            itemBuilder: (context, index) {
-                              final item = tutorialFiles[index];
-                              final bool isLink = item['file_type'] == 'link';
-
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                elevation: 2,
-                                child: ListTile(
-                                  leading: Icon(
-                                    isLink
-                                        ? Icons.link
-                                        : _getFileIcon(item['file_type']),
-                                    size: 36,
-                                    color:
-                                        isLink
-                                            ? Colors.blueAccent
-                                            : Colors.redAccent,
-                                  ),
-                                  title: Text(
-                                    item['title'] ??
-                                        item['file_name'] ??
-                                        'Untitled',
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (item['description'] != null)
-                                        Text(item['description']),
-                                      Text(
-                                        'Platform: ${item['platform']?.toString().replaceAll('_', ' ').toUpperCase() ?? 'Unknown'}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (!isLink)
-                                        Text(
-                                          'File Type: ${item['file_type']?.toString().toUpperCase() ?? 'Unknown'}',
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      if (!isLink && item['file_size'] != null)
-                                        Text(
-                                          'Size: ${_formatFileSize(item['file_size'])}',
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (item['file_url'] != null)
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.open_in_new,
-                                            color: Colors.green,
-                                          ),
-                                          onPressed:
-                                              () => _openFileURL(
-                                                item['file_url'],
-                                                item['file_type'],
-                                                item['title'] ??
-                                                    item['file_name'] ??
-                                                    'File Viewer',
-                                              ),
-                                        ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () => _deleteFile(item),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                      _buildTutorialFilesList(),
                     ],
                   ),
                 ),
@@ -919,81 +1077,320 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
     );
   }
 
-  // First, let's fix the notification methods:
+  // Helper method to get the appropriate icon for file type
+  Widget _getFileIcon(String? extension) {
+    IconData iconData;
+    Color iconColor;
 
-  Future<void> _sendNotification(String title, String body) async {
-    try {
-      AwesomeNotifications().createNotification(
-        content: NotificationContent(
-          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-          channelKey: 'tutorial_channel',
-          title: title,
-          body: body,
-          notificationLayout: NotificationLayout.Default,
-          category: NotificationCategory.Message,
-        ),
-      );
-      print('Local notification sent: $title - $body');
-    } catch (e) {
-      print('Error sending local notification: $e');
+    switch (extension?.toLowerCase()) {
+      case 'pdf':
+        iconData = Icons.picture_as_pdf;
+        iconColor = Colors.red;
+        break;
+      case 'ppt':
+      case 'pptx':
+        iconData = Icons.slideshow;
+        iconColor = Colors.orange;
+        break;
+      case 'doc':
+      case 'docx':
+        iconData = Icons.description;
+        iconColor = Colors.blue;
+        break;
+      default:
+        iconData = Icons.insert_drive_file;
+        iconColor = Colors.grey;
+    }
+
+    return Icon(iconData, color: iconColor, size: 28);
+  }
+
+  // Format file size to human-readable
+  String _formatFileSize(int size) {
+    if (size < 1024) {
+      return '$size B';
+    } else if (size < 1024 * 1024) {
+      return '${(size / 1024).toStringAsFixed(1)} KB';
+    } else if (size < 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
   }
 
+  // Build the list of existing tutorial files
+  Widget _buildTutorialFilesList() {
+    if (tutorialFiles.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'No tutorials or files available. Upload one now!',
+            style: TextStyle(
+              fontSize: 16,
+              fontStyle: FontStyle.italic,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: tutorialFiles.length,
+      itemBuilder: (context, index) {
+        final file = tutorialFiles[index];
+        final bool isLink = file['file_type'] == 'link';
+        final String title = file['title'] ?? file['file_name'] ?? 'Untitled';
+        final String description = file['description'] ?? 'No description';
+        final String platform = file['platform'] ?? 'Unknown Platform';
+        final String date = DateTime.parse(
+          file['uploaded_at'],
+        ).toLocal().toString().substring(0, 10);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          elevation: 3,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: InkWell(
+            onTap: () {
+              if (isLink) {
+                launchUrl(Uri.parse(file['file_url']));
+              } else {
+                _openFileURL(file['file_url'], file['file_type'], title);
+              }
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left: Thumbnail or Icon
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEBF2FA),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFD1E3F8),
+                        width: 1,
+                      ),
+                    ),
+                    child:
+                        file['thumbnail_url'] != null
+                            ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                file['thumbnail_url'],
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return _getTutorialIcon(platform);
+                                },
+                              ),
+                            )
+                            : _getTutorialIcon(platform),
+                  ),
+                  const SizedBox(width: 16),
+                  // Middle: Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF27445D),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          description,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Chip(
+                              label: Text(
+                                platform.replaceAll('_', ' ').toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              backgroundColor: const Color(0xFF3B6EA5),
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              date,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            if (!isLink) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                _formatFileSize(file['file_size'] ?? 0),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Right: Actions
+                  Column(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _showDeleteConfirmationDialog(file),
+                        tooltip: 'Delete',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.open_in_new,
+                          color: Color(0xFF3B6EA5),
+                        ),
+                        onPressed: () {
+                          if (isLink) {
+                            launchUrl(Uri.parse(file['file_url']));
+                          } else {
+                            _openFileURL(
+                              file['file_url'],
+                              file['file_type'],
+                              title,
+                            );
+                          }
+                        },
+                        tooltip: 'Open',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Get icon for tutorial platform
+  Widget _getTutorialIcon(String platform) {
+    IconData iconData;
+    Color iconColor;
+
+    switch (platform.toLowerCase()) {
+      case 'google_meet':
+        iconData = Icons.video_call;
+        iconColor = Colors.green;
+        break;
+      case 'zoom':
+        iconData = Icons.videocam;
+        iconColor = Colors.blue;
+        break;
+      case 'gmail':
+        iconData = Icons.email;
+        iconColor = Colors.red;
+        break;
+      case 'viber':
+        iconData = Icons.chat;
+        iconColor = Colors.purple;
+        break;
+      case 'whatsapp':
+        iconData = Icons.phone;
+        iconColor = Colors.green;
+        break;
+      case 'cliqq':
+        iconData = Icons.message;
+        iconColor = Colors.orange;
+        break;
+      default:
+        iconData = Icons.help;
+        iconColor = Colors.grey;
+    }
+
+    return Center(child: Icon(iconData, color: iconColor, size: 40));
+  }
+
+  // Show confirmation dialog before deleting
+  void _showDeleteConfirmationDialog(Map<String, dynamic> file) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Tutorial File'),
+          content: Text(
+            'Are you sure you want to delete "${file['title'] ?? file['file_name']}"? This action cannot be undone.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _deleteFile(file);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Send local notification
+  Future<void> _sendNotification(String title, String body) async {
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        channelKey:
+            'basic_channel', // Must match the channel created in main.dart
+        title: title,
+        body: body,
+        notificationLayout: NotificationLayout.Default,
+      ),
+    );
+  }
+
+  // Save notification to database for all users
   Future<void> _saveNotificationToDatabase(String title, String message) async {
     try {
       await _supabase.from('notifications').insert({
         'title': title,
         'message': message,
-        'created_at':
-            DateTime.now().toIso8601String(), // Explicitly set created_at
-        'is_read': false, // Default to unread
-        'user_id':
-            _supabase
-                .auth
-                .currentUser
-                ?.id, // Admin who created the notification
-        'for_all_users': true, // Make it available to all users
+        'created_at': DateTime.now().toIso8601String(),
+        'user_id': _supabase.auth.currentUser?.id,
+        'is_read': false,
+        'notification_type': 'tutorial_update',
       });
-      print('Notification saved to database: $title');
     } catch (e) {
       print('Error saving notification to database: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error saving notification: $e')));
     }
-  }
-
-  // Helper function to get appropriate icon for file type
-  IconData _getFileIcon(String? fileType) {
-    if (fileType == null) return Icons.insert_drive_file;
-
-    switch (fileType.toLowerCase()) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'ppt':
-      case 'pptx':
-        return Icons.slideshow;
-      case 'doc':
-      case 'docx':
-        return Icons.description;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
-  // Helper function to format file size
-  String _formatFileSize(int? bytes) {
-    if (bytes == null) return 'Unknown size';
-
-    const suffixes = ['B', 'KB', 'MB', 'GB'];
-    var i = 0;
-    double size = bytes.toDouble();
-
-    while (size >= 1024 && i < suffixes.length - 1) {
-      size /= 1024;
-      i++;
-    }
-
-    return '${size.toStringAsFixed(1)} ${suffixes[i]}';
   }
 }

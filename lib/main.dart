@@ -5,26 +5,24 @@ import 'login_page.dart';
 import 'signup_page.dart';
 import 'dashboard.dart';
 import 'tutorial/tutorial_page.dart';
-import 'practice_mode.dart';
 import 'tech glossary/tech_glossary.dart';
 import 'games_page.dart';
-import 'admin/admin_dashboard.dart';
-import 'admin/admin_login.dart';
-import 'notification/notification.dart';
-import 'tutorial/googlemeet.dart';
 import 'progress/progress.dart';
 import 'community forum/comdboard.dart';
 import 'package:senior_surfers/settings_page.dart';
 import 'achievements_page.dart';
+import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetwcpage1.dart';
+import 'practice_mode.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
+import 'notification/notification.dart';
+import 'games/googlemeet.dart';
+import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetwcpage.dart';
+import 'admin/admin_dashboard.dart';
+import 'admin/admin_login.dart';
 import 'admin/admin_community.dart';
 import 'admin/admin_techterm.dart';
-import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetDashboard.dart';
 import 'admin/admin_tutorial.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:awesome_notifications/awesome_notifications.dart';
-import 'tutorial/platform_tutorial_page.dart';
 import 'admin/admin_analysis.dart';
-import 'games/googlemeet.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,7 +69,6 @@ class MyApp extends StatelessWidget {
         '/admin': (context) => AdminDashboard(),
         '/admin-login': (context) => const AdminLoginPage(),
         '/notification': (context) => NotificationPage(),
-        //'/googlemeet': (context) => const GoogleMeetTutorialPage(),
         '/progress': (context) => const ProgressPage(),
         '/community': (context) => const CommunityForumPage(),
         '/achievements': (context) => AchievementsPage(),
@@ -81,25 +78,9 @@ class MyApp extends StatelessWidget {
         '/admintutorial': (context) => const AddTutorialPage(),
         '/adminanalysis': (context) => const AnalysisPage(),
         '/gmeetgame': (context) => const GoogleMeetQuizGame(),
+        '/gmeetSignin1': (context) => const GoogleMeetSignIn1(),
       },
     );
-  }
-
-  // You can add this function to get the unread notification count
-  Future<int> getUnreadNotificationCount() async {
-    try {
-      final response =
-          await Supabase.instance.client
-              .from('notifications')
-              .select('id')
-              .eq('read', false)
-              .count();
-
-      return response.count ?? 0;
-    } catch (e) {
-      print('Error getting unread notifications count: $e');
-      return 0;
-    }
   }
 
   // This method should be called in your main.dart or initialization code

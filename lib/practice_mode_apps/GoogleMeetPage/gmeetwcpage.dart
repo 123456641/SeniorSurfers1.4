@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:device_frame/device_frame.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'gmeetDashboard.dart';
+import 'gmeetwcpage1.dart';
 
 class GoogleMeetSignIn1 extends StatelessWidget {
   const GoogleMeetSignIn1({super.key});
@@ -57,14 +57,14 @@ class GoogleMeetSignIn1 extends StatelessWidget {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          "https://storage.googleapis.com/a1aa/image/d9c28a59-d11f-4b6a-e0e5-abf0c2f0f79a.jpg",
+                        child: Image.asset(
+                          'assets/images/gmeetdesign.png',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             return Icon(
                               Icons.image,
                               color: Colors.white54,
-                              size: 48,
+                              size: 24,
                             );
                           },
                         ),
@@ -107,8 +107,8 @@ class GoogleMeetSignIn1 extends StatelessWidget {
                         // Profile image with fallback
                         ClipRRect(
                           borderRadius: BorderRadius.circular(999),
-                          child: Image.network(
-                            "https://storage.googleapis.com/a1aa/image/68702d7e-75fd-4cd2-3109-080082b4fb35.jpg",
+                          child: Image.asset(
+                            'assets/images/elderpfp.png',
                             width: 36,
                             height: 36,
                             fit: BoxFit.cover,
@@ -132,7 +132,7 @@ class GoogleMeetSignIn1 extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: const [
                               Text(
-                                "Boluntate, John Christian J",
+                                "Dela Cruz, Juan",
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -142,7 +142,7 @@ class GoogleMeetSignIn1 extends StatelessWidget {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                "202310530@gordoncollege.edu.ph",
+                                "user@gmail.com",
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Color(0xFFb9a9a7),
@@ -179,7 +179,7 @@ class GoogleMeetSignIn1 extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text("Continue as Boluntate,"),
+                    child: const Text("Continue as User,"),
                   ),
                   const SizedBox(height: 16),
                   const Text(

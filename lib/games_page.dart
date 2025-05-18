@@ -12,6 +12,13 @@ class GamesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final List<_GameItem> games = [
       _GameItem(
+        name: 'Google Meet Quiz',
+        widget: const GoogleMeetQuizGame(),
+        image: 'assets/images/gmeetgamecover.png',
+        description:
+            'Test your knowledge with interactive quizzes inspired by Google Meet.',
+      ),
+      _GameItem(
         name: 'Chess',
         widget: const ChessGame(),
         image: 'assets/images/games/chess.png',
@@ -19,24 +26,11 @@ class GamesPage extends StatelessWidget {
             'Play the classic game of chess against the computer or a friend.',
       ),
       _GameItem(
-        name: 'Solitaire',
-        widget: const SolitaireGame(),
-        image: 'assets/images/games/solitaire.png',
-        description: 'Enjoy a relaxing game of solitaire with beautiful cards.',
-      ),
-      _GameItem(
         name: 'Damma',
         widget: const DammaGame(),
         image: 'assets/images/games/damma.png',
         description:
             'Challenge yourself with this traditional strategic board game.',
-      ),
-      _GameItem(
-        name: 'Google Meet Quiz',
-        widget: const GoogleMeetQuizGame(),
-        image: 'assets/images/games/google_meet_quiz.png',
-        description:
-            'Test your knowledge with interactive quizzes inspired by Google Meet.',
       ),
     ];
 
@@ -69,14 +63,6 @@ class GamesPage extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (isWebLayout)
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // Add functionality for web-specific action
-                        },
-                        icon: const Icon(Icons.gamepad),
-                        label: const Text('Featured Games'),
-                      ),
                   ],
                 ),
               ),

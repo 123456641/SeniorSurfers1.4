@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:math';
+import '../games_page.dart';
+
+void main() {
+  runApp(const GoogleMeetQuizGame());
+}
 
 class GoogleMeetQuizGame extends StatelessWidget {
   const GoogleMeetQuizGame({Key? key}) : super(key: key);
@@ -27,7 +31,12 @@ class GoogleMeetQuizGame extends StatelessWidget {
           bodyLarge: TextStyle(fontSize: 16, color: Color(0xFF202124)),
         ),
       ),
-      home: const WelcomeScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const WelcomeScreen(),
+        '/quiz': (context) => const QuizScreen(),
+        '/games': (context) => const GamesPage(),
+      },
     );
   }
 }
@@ -74,9 +83,7 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 60),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const QuizScreen()),
-                  );
+                  Navigator.pushNamed(context, '/quiz');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -94,6 +101,20 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
                 child: const Text('Start Quiz'),
+              ),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/games');
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                child: const Text('Go Back'),
               ),
             ],
           ),
@@ -344,6 +365,26 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
             ),
+            // Go back to home button
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextButton.icon(
+                onPressed: () {
+                  _onWillPop().then((exit) {
+                    if (exit) {
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil('/', (route) => false);
+                    }
+                  });
+                },
+                icon: const Icon(Icons.home),
+                label: const Text('Go Back to Home'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -469,12 +510,14 @@ class AnswerOption extends StatelessWidget {
 class ResultScreen extends StatelessWidget {
   final int score;
   final int totalQuestions;
+  // Pass threshold - 60% of maximum possible score
+  final int passThreshold;
 
-  const ResultScreen({
-    Key? key,
-    required this.score,
-    required this.totalQuestions,
-  }) : super(key: key);
+  ResultScreen({Key? key, required this.score, required this.totalQuestions})
+    : passThreshold = (totalQuestions * 100 * 0.6).round(),
+      super(key: key);
+
+  bool get isPassed => score >= passThreshold;
 
   @override
   Widget build(BuildContext context) {
@@ -506,10 +549,9 @@ class ResultScreen extends StatelessWidget {
           icon: const Icon(Icons.home),
           color: Colors.white,
           onPressed: () {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-              (route) => false,
-            );
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil('/', (route) => false);
           },
         ),
       ),
@@ -529,12 +571,35 @@ class ResultScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                'Quiz Completed!',
-                style: TextStyle(
+              Text(
+                isPassed ? 'You Passed!' : 'Quiz Completed',
+                style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Pass/Fail message
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: isPassed ? Colors.green : Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isPassed
+                      ? 'You have passed! Click below to learn a new tutorial.'
+                      : 'You need more practice. Return to tutorial or try again.',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: 30),
@@ -576,32 +641,99 @@ class ResultScreen extends StatelessWidget {
                 '${percentage.toStringAsFixed(1)}% correct',
                 style: const TextStyle(fontSize: 18, color: Colors.white),
               ),
-              const SizedBox(height: 50),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (context) => const WelcomeScreen(),
+              const SizedBox(height: 40),
+              // Buttons based on pass/fail status
+              if (isPassed)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/tutorials', (route) => false);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 16,
                     ),
-                    (route) => false,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 16,
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
+                  child: const Text('Learn New Tutorial'),
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil('/quiz', (route) => false);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 16,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text('Try Again'),
+                    ),
+                    const SizedBox(width: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pushNamedAndRemoveUntil(
+                          '/tutorials',
+                          (route) => false,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 16,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text('Return to Tutorial'),
+                    ),
+                  ],
                 ),
-                child: const Text('Play Again'),
+              const SizedBox(height: 20),
+              // Home button
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil('/', (route) => false);
+                },
+                icon: const Icon(Icons.home, color: Colors.white),
+                label: const Text(
+                  'Go to Home',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -611,7 +743,6 @@ class ResultScreen extends StatelessWidget {
   }
 }
 
-// Quiz questions
 class Question {
   final String questionText;
   final List<String> answers;

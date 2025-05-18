@@ -477,7 +477,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           onPressed: _showLogoutDialog,
                           child: Text(
-                            'Log Out',
+                            'Sign Out',
                             style: TextStyle(fontSize: 16),
                           ),
                         ),

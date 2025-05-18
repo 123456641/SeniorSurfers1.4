@@ -90,12 +90,6 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/dashboard');
-                    },
-                    child: const Text('Dashboard'),
-                  ),
-                  ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
