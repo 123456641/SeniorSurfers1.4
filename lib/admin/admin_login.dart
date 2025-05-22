@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // Import go_router
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../header_widget.dart';
 
@@ -57,8 +58,9 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
                 adminCheck['is_admin'].toString().toLowerCase() == 'true');
 
         if (isAdmin) {
-          print('User is an admin, navigating to /admin');
-          Navigator.pushReplacementNamed(context, '/admin');
+          print('User is an admin, navigating to admin dashboard');
+          // Redirect to the admin dashboard's main page (analysis)
+          context.go('/admin/analysis');
         } else {
           print('User is not an admin');
           setState(() {

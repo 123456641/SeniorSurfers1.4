@@ -12,31 +12,17 @@ class UserGrowthData {
 }
 
 /// A widget that displays monthly user growth data as a bar chart
-class UserGrowthChart extends StatefulWidget {
+class UserGrowthChart extends StatelessWidget {
   final List<UserGrowthData> data;
 
   const UserGrowthChart({Key? key, required this.data}) : super(key: key);
 
   @override
-  State<UserGrowthChart> createState() => _UserGrowthChartState();
-}
-
-class _UserGrowthChartState extends State<UserGrowthChart> {
-  // Scroll controller for the horizontal chart
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     // Find max value for scaling, with a minimum default of 10
     double maxValue = 10.0;
-    if (widget.data.isNotEmpty) {
-      final max = widget.data
+    if (data.isNotEmpty) {
+      final max = data
           .map((e) => e.newUsers.toDouble())
           .reduce((a, b) => a > b ? a : b);
       // Add 20% padding to the max value and round to next multiple of 5
@@ -48,13 +34,13 @@ class _UserGrowthChartState extends State<UserGrowthChart> {
     List<UserGrowthData> fullYearData = [];
 
     // If data is not empty, fill in a full year of data
-    if (widget.data.isNotEmpty) {
+    if (data.isNotEmpty) {
       // Determine the year to use (from the first data point)
-      final int year = widget.data.first.month.year;
+      final int year = data.first.month.year;
 
       // Create map of existing data for quick lookup
       Map<int, int> monthDataMap = {};
-      for (var item in widget.data) {
+      for (var item in data) {
         monthDataMap[item.month.month] = item.newUsers;
       }
 
@@ -79,18 +65,17 @@ class _UserGrowthChartState extends State<UserGrowthChart> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Calculate bar width and total content width
-        final double barWidth = constraints.maxWidth * 0.1;
-        final double barSpacing = barWidth * 0.5;
-
-        // Calculate the total width needed for all 12 months
-        final double totalWidth = (barWidth + barSpacing) * 12;
-
-        // Minimum width is the constraint width, but could be larger
-        final double contentWidth = math.max(constraints.maxWidth, totalWidth);
+        // Calculate bar width based on available space
+        // Reserve 50px for left/right padding and divide the rest among 12 months
+        final double availableWidth = constraints.maxWidth - 50.0;
+        final double barWidth =
+            (availableWidth / 12) * 0.7; // Use 70% of available space for bars
+        final double barSpacing =
+            (availableWidth / 12) * 0.3; // Use 30% for spacing
 
         return Column(
           children: [
+            // Chart container
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(
@@ -99,88 +84,44 @@ class _UserGrowthChartState extends State<UserGrowthChart> {
                   bottom: 5.0,
                   top: 20.0, // Space for bar value labels
                 ),
-                child: ShaderMask(
-                  shaderCallback: (Rect rect) {
-                    return LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.white.withOpacity(0.1),
-                        Colors.white,
-                        Colors.white,
-                        Colors.white.withOpacity(0.1),
-                      ],
-                      stops: const [0.0, 0.05, 0.95, 1.0],
-                    ).createShader(rect);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: contentWidth,
-                      child: CustomPaint(
-                        size: Size(contentWidth, constraints.maxHeight * 0.85),
-                        painter: BarChartPainter(
-                          data: fullYearData,
-                          maxValue: maxValue,
-                          barWidth: barWidth,
-                          barSpacing: barSpacing,
-                        ),
-                      ),
-                    ),
+                child: CustomPaint(
+                  size: Size(
+                    constraints.maxWidth - 50.0,
+                    constraints.maxHeight * 0.85,
+                  ),
+                  painter: BarChartPainter(
+                    data: fullYearData,
+                    maxValue: maxValue,
+                    barWidth: barWidth,
+                    barSpacing: barSpacing,
                   ),
                 ),
               ),
             ),
 
-            // Month labels at the bottom - also scrollable
+            // Month labels container - no scrolling needed
             SizedBox(
               height: 22,
               child: Padding(
                 padding: const EdgeInsets.only(left: 40.0, right: 10.0),
-                child: ShaderMask(
-                  shaderCallback: (Rect rect) {
-                    return LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.white.withOpacity(0.1),
-                        Colors.white,
-                        Colors.white,
-                        Colors.white.withOpacity(0.1),
-                      ],
-                      stops: const [0.0, 0.05, 0.95, 1.0],
-                    ).createShader(rect);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: SingleChildScrollView(
-                    controller: _scrollController, // Use the same controller
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: contentWidth,
-                      child: Row(
-                        children: List.generate(fullYearData.length, (index) {
-                          return SizedBox(
-                            width: barWidth + barSpacing,
-                            child: Center(
-                              child: Text(
-                                DateFormat(
-                                  'MMM',
-                                ).format(fullYearData[index].month),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          );
-                        }),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(fullYearData.length, (index) {
+                    return SizedBox(
+                      width: barWidth + barSpacing,
+                      child: Center(
+                        child: Text(
+                          DateFormat('MMM').format(fullYearData[index].month),
+                          style: const TextStyle(
+                            fontSize: 10, // Slightly smaller to fit
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ),
               ),
             ),

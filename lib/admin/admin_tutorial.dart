@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../tutorial/pdf_viewer_page.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:image_picker/image_picker.dart';
 
 class AddTutorialPage extends StatefulWidget {
   const AddTutorialPage({super.key});
@@ -37,6 +36,13 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   String? _thumbnailUrl;
   bool isUploadingThumbnail = false;
 
+  String _formatPlatformName(String platform) {
+    return platform
+        .split('_')
+        .map((word) => word[0].toUpperCase() + word.substring(1))
+        .join(' ');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,16 +70,18 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
           .order('uploaded_at', ascending: false);
 
       setState(() {
-        tutorialFiles = files;
+        tutorialFiles = List<Map<String, dynamic>>.from(files);
         isLoading = false;
       });
     } catch (e) {
       setState(() {
         isLoading = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error loading tutorials: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading tutorials: $e')));
+      }
     }
   }
 
@@ -101,7 +109,7 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
       // If we have a selected file, upload it
       if (_selectedFileInfo != null) {
         await _uploadFile();
-      } else {
+      } else if (_linkController.text.isNotEmpty) {
         // If no file, just create an entry in tutorial_files with link
         await _supabase.from('tutorial_files').insert({
           'file_name': _titleController.text,
@@ -113,7 +121,19 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
           'uploaded_at': DateTime.now().toIso8601String(),
           'user_id': _supabase.auth.currentUser?.id,
           'thumbnail_url': _thumbnailUrl,
+          'title': _titleController.text,
         });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please provide either a file or a link'),
+          ),
+        );
+        setState(() {
+          isLoading = false;
+          isUploading = false;
+        });
+        return;
       }
 
       // Create notification
@@ -124,13 +144,14 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
               : 'A new tutorial "${_titleController.text}" has been added.';
 
       // Send local notification
-      _sendNotification(notificationTitle, notificationBody);
+      await _sendNotification(notificationTitle, notificationBody);
 
       // Save to database for all users to see
       await _saveNotificationToDatabase(notificationTitle, notificationBody);
 
       _titleController.clear();
       _linkController.clear();
+
       setState(() {
         selectedPlatform = null;
         _selectedFileInfo = null;
@@ -142,21 +163,27 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
         isLoading = false;
         isPreviewingFile = false;
       });
+
       _fileDescriptionController.clear();
 
-      fetchTutorialFiles(); // Refresh the list
+      await fetchTutorialFiles(); // Refresh the list
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tutorial added successfully')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tutorial added successfully')),
+        );
+      }
     } catch (e) {
+      print('Error adding tutorial: $e');
       setState(() {
         isLoading = false;
         isUploading = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error adding tutorial: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error adding tutorial: $e')));
+      }
     }
   }
 
@@ -428,12 +455,14 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
       setState(() {
         isUploadingThumbnail = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error uploading thumbnail: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading thumbnail: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -592,12 +621,14 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
       setState(() {
         isUploading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error uploading file: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading file: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -659,46 +690,145 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
         isLoading = false;
         isUploading = false;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error uploading file: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error uploading file: $e')));
+      }
     }
   }
 
   void _showPlatformSelectionDialog() {
-    showDialog(
+    // Make a local copy to avoid state issues
+    String? currentSelection = selectedPlatform;
+
+    showDialog<String>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Select Platform'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                _buildPlatformOption('Google Meet', 'google_meet'),
-                _buildPlatformOption('Zoom', 'zoom'),
-                _buildPlatformOption('Gmail', 'gmail'),
-                _buildPlatformOption('Viber', 'viber'),
-                _buildPlatformOption('WhatsApp', 'whatsapp'),
-                _buildPlatformOption('Cliqq', 'cliqq'),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Select Platform'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      title: const Text('Google Meet'),
+                      leading: Radio<String>(
+                        value: 'google_meet',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'google_meet');
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Zoom'),
+                      leading: Radio<String>(
+                        value: 'zoom',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'zoom');
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Gmail'),
+                      leading: Radio<String>(
+                        value: 'gmail',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'gmail');
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Viber'),
+                      leading: Radio<String>(
+                        value: 'viber',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'viber');
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('WhatsApp'),
+                      leading: Radio<String>(
+                        value: 'whatsapp',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'whatsapp');
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Cliqq'),
+                      leading: Radio<String>(
+                        value: 'cliqq',
+                        groupValue: currentSelection,
+                        onChanged: (value) {
+                          setStateDialog(() => currentSelection = value);
+                        },
+                      ),
+                      onTap: () {
+                        setStateDialog(() => currentSelection = 'cliqq');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                  },
+                ),
+                TextButton(
+                  child: const Text('Confirm'),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(currentSelection);
+                  },
+                ),
               ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+            );
+          },
         );
       },
-    );
+    ).then((selectedValue) {
+      if (selectedValue != null) {
+        setState(() {
+          selectedPlatform = selectedValue;
+        });
+      }
+    });
   }
 
   Widget _buildPlatformOption(String name, String value) {
     return ListTile(
       title: Text(name),
+      selected: selectedPlatform == value,
+      leading:
+          selectedPlatform == value
+              ? const Icon(Icons.check_circle, color: Color(0xFF3B6EA5))
+              : const Icon(Icons.circle_outlined),
       onTap: () {
         setState(() {
           selectedPlatform = value;
@@ -709,7 +839,6 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   }
 
   // Open a file URL in browser
-  // Method with fix for nullable title parameter
   Future<void> _openFileURL(
     String url, [
     String? fileType,
@@ -721,28 +850,39 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
     // Default title if null - Added fix for nullable title
     final String safeTitle = title ?? 'File Viewer';
 
-    // Handle PDFs with the internal viewer
-    if (fileType == 'pdf') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => PDFViewerPage(
-                title: safeTitle,
-                fileUrl: url, // Changed from pdfAssetPath
-                requiresAuth: false, // Add this based on your security needs
-              ),
-        ),
-      );
-    } else {
-      // For other files, open in external application
-      if (!await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      )) {
+    try {
+      // Handle PDFs with the internal viewer
+      if (fileType == 'pdf') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) => PDFViewerPage(
+                  title: safeTitle,
+                  fileUrl: url,
+                  requiresAuth: false,
+                ),
+          ),
+        );
+      } else {
+        // For other files, open in external application
+        if (!await launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication,
+        )) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not open file: $url')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error opening file: $e');
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Could not open file: $url')));
+        ).showSnackBar(SnackBar(content: Text('Error opening file: $e')));
       }
     }
   }
@@ -839,11 +979,18 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
                           padding: const EdgeInsets.all(16),
                           backgroundColor: const Color(0xFF3B6EA5),
                         ),
-                        child: Text(
-                          selectedPlatform != null
-                              ? 'Selected Platform: ${selectedPlatform!.replaceAll('_', ' ').toUpperCase()}'
-                              : 'Select Platform',
-                          style: const TextStyle(color: Colors.white),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.devices, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Text(
+                              selectedPlatform != null
+                                  ? 'Platform: ${_formatPlatformName(selectedPlatform!)}'
+                                  : 'Select Platform',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 24),

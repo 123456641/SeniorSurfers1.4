@@ -5,6 +5,8 @@ import 'dart:io';
 import 'header_widget.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:go_router/go_router.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -180,100 +182,98 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      setState(() {
-        _isUploadingImage = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isUploadingImage = true;
+        });
+      }
 
       print('Image selected: ${pickedFile.path}');
 
-      // Create a unique file path in Supabase storage
-      final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      // Simplified path structure - just use the filename directly in the bucket
-      final filePath = fileName;
-      final file = File(pickedFile.path);
+      // Read file as bytes to avoid file path issues
+      final Uint8List bytes = await pickedFile.readAsBytes();
 
-      print('Uploading to storage path: $filePath');
+      // Create a unique file name without complex paths
+      final String fileName =
+          'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      print('Uploading with file name: $fileName');
 
       try {
-        // Upload the file to Supabase Storage
+        // Upload bytes directly instead of File object
         await supabase.storage
             .from('profiles')
-            .upload(
-              filePath,
-              file,
+            .uploadBinary(
+              fileName,
+              bytes,
               fileOptions: const FileOptions(
                 cacheControl: '3600',
                 upsert: true,
+                contentType: 'image/jpeg',
               ),
             );
+
         print('File uploaded successfully to storage');
-      } catch (storageError) {
-        print('Storage upload error: $storageError');
 
-        // If the error is because the file already exists, we can continue
-        if (!storageError.toString().contains('duplicate')) {
-          throw storageError; // Re-throw if it's not a duplicate error
-        }
-      }
+        // Get the public URL for the uploaded file with forced cache busting
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        String imageUrl = supabase.storage
+            .from('profiles')
+            .getPublicUrl(fileName);
 
-      // Get the public URL for the uploaded file
-      final imageUrl = supabase.storage.from('profiles').getPublicUrl(filePath);
-      print('Image public URL: $imageUrl');
+        print('Raw image URL: $imageUrl');
 
-      try {
+        // Add cache-busting parameter to ensure we get the latest image
+        imageUrl =
+            imageUrl.contains('?')
+                ? '$imageUrl&t=$timestamp'
+                : '$imageUrl?t=$timestamp';
+
+        print('Image public URL with cache busting: $imageUrl');
+
         // Update the user's profile in the database
-        final updateResponse = await supabase
+        await supabase
             .from('users')
             .update({'profile_picture_url': imageUrl})
             .eq('id', user.id);
-        print('Database update response: $updateResponse');
 
-        // Verify the update by fetching the latest user data
-        final verifyResponse =
-            await supabase
-                .from('users')
-                .select('profile_picture_url')
-                .eq('id', user.id)
-                .single();
+        print('Database updated with new image URL');
 
-        print(
-          'Verification response: ${verifyResponse['profile_picture_url']}',
-        );
+        if (mounted) {
+          setState(() {
+            profilePictureUrl = imageUrl;
+            _isUploadingImage = false;
+          });
 
-        if (verifyResponse['profile_picture_url'] != imageUrl) {
-          print('WARNING: Verification failed - URLs don\'t match');
+          // Force a refresh to ensure UI updates
+          await _fetchUserData();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Profile picture updated successfully'),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.green,
+            ),
+          );
         }
-      } catch (dbError) {
-        print('Database update error: $dbError');
-        throw dbError;
-      }
-
-      if (mounted) {
-        setState(() {
-          profilePictureUrl = imageUrl;
-          _isUploadingImage = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Profile picture updated successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.green,
-          ),
-        );
+      } catch (uploadError) {
+        print('Storage operation error: $uploadError');
+        throw uploadError;
       }
     } catch (e) {
-      print('Error picking or uploading image: $e');
+      print('Error in image upload process: $e');
       if (mounted) {
         setState(() {
           _isUploadingImage = false;
         });
 
+        // Show a more specific error message if possible
+        String errorMessage =
+            'Failed to update profile picture: ${e.toString()}';
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Failed to update profile picture. Please try again.',
-            ),
+            content: Text(errorMessage),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.red,
           ),
@@ -293,21 +293,44 @@ class _SettingsPageState extends State<SettingsPage> {
       _formKey.currentState!.save();
 
       final user = supabase.auth.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        print('Cannot update profile: No authenticated user');
+        return;
+      }
 
       setState(() {
         _isLoading = true;
       });
 
       try {
-        await supabase
-            .from('users')
-            .update({
-              'first_name': _firstName,
-              'last_name': _lastName,
-              'phone': _phoneNumber,
-            })
-            .eq('id', user.id);
+        print('Updating user profile with data:');
+        print('First Name: $_firstName');
+        print('Last Name: $_lastName');
+        print('Phone: $_phoneNumber');
+        print('User ID: ${user.id}');
+
+        // Create update data map
+        final updateData = {
+          'first_name': _firstName,
+          'last_name': _lastName,
+          'phone': _phoneNumber,
+        };
+
+        // Ensure we have data to update
+        if (_firstName.isEmpty && _lastName.isEmpty && _phoneNumber.isEmpty) {
+          throw Exception('No data to update');
+        }
+
+        // Perform the update
+        final response =
+            await supabase
+                .from('users')
+                .update(updateData)
+                .eq('id', user.id)
+                .select();
+
+        // Log the response for debugging
+        print('Update response: $response');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -327,7 +350,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to update profile. Please try again.'),
+              content: Text('Failed to update profile: ${e.toString()}'),
               behavior: SnackBarBehavior.floating,
               backgroundColor: Colors.red,
             ),
@@ -372,12 +395,8 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () async {
                 await supabase.auth.signOut();
                 if (mounted) {
-                  // Navigate back to the Welcome Page and clear the navigation stack
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/',
-                    (route) => false,
-                  );
+                  // Navigate back to Welcome Page using GoRouter
+                  context.go('/');
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -515,7 +534,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             onPressed: _showLogoutDialog,
-            child: Text('Log Out', style: TextStyle(fontSize: 16)),
+            child: Text('Sign Out', style: TextStyle(fontSize: 16)),
           ),
         ),
       ],
@@ -557,13 +576,16 @@ class _SettingsPageState extends State<SettingsPage> {
                           )
                           : ClipOval(
                             child:
-                                profilePictureUrl != null
-                                    ? Image.network(
-                                      profilePictureUrl!,
+                                profilePictureUrl != null &&
+                                        profilePictureUrl!.isNotEmpty
+                                    ? FadeInImage.assetNetwork(
+                                      placeholder:
+                                          'assets/images/placeholder_profile.png', // Add a placeholder image to your assets
+                                      image: profilePictureUrl!,
                                       fit: BoxFit.cover,
                                       width: isLargeScreen ? 160 : 120,
                                       height: isLargeScreen ? 160 : 120,
-                                      errorBuilder: (
+                                      imageErrorBuilder: (
                                         context,
                                         error,
                                         stackTrace,
@@ -575,29 +597,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                           Icons.person,
                                           size: isLargeScreen ? 80 : 60,
                                           color: Colors.grey[800],
-                                        );
-                                      },
-                                      loadingBuilder: (
-                                        context,
-                                        child,
-                                        loadingProgress,
-                                      ) {
-                                        if (loadingProgress == null)
-                                          return child;
-                                        return Center(
-                                          child: CircularProgressIndicator(
-                                            color: Colors.red,
-                                            value:
-                                                loadingProgress
-                                                            .expectedTotalBytes !=
-                                                        null
-                                                    ? loadingProgress
-                                                            .cumulativeBytesLoaded /
-                                                        (loadingProgress
-                                                                .expectedTotalBytes ??
-                                                            1)
-                                                    : null,
-                                          ),
                                         );
                                       },
                                     )
@@ -722,8 +721,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 initialValue: _firstName,
                 enabled: isEditable,
                 validator:
-                    (value) => value!.isEmpty ? 'Enter first name' : null,
-                onSaved: (value) => _firstName = value!,
+                    (value) =>
+                        value == null || value.isEmpty
+                            ? 'Enter first name'
+                            : null,
+                onSaved: (value) => _firstName = value ?? '',
                 icon: Icons.person,
               ),
             ),
@@ -733,8 +735,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 label: 'Last Name',
                 initialValue: _lastName,
                 enabled: isEditable,
-                validator: (value) => value!.isEmpty ? 'Enter last name' : null,
-                onSaved: (value) => _lastName = value!,
+                validator:
+                    (value) =>
+                        value == null || value.isEmpty
+                            ? 'Enter last name'
+                            : null,
+                onSaved: (value) => _lastName = value ?? '',
                 icon: Icons.person_outline,
               ),
             ),
@@ -750,9 +756,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 label: 'Phone Number',
                 initialValue: _phoneNumber,
                 enabled: isEditable,
-                validator:
-                    (value) => value!.isEmpty ? 'Enter phone number' : null,
-                onSaved: (value) => _phoneNumber = value!,
+                validator: null, // Phone is optional
+                onSaved: (value) => _phoneNumber = value ?? '',
                 icon: Icons.phone,
                 keyboardType: TextInputType.phone,
               ),
@@ -771,7 +776,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   }
                   return null;
                 },
-                onSaved: (value) => _email = value!,
+                onSaved: (value) => _email = value ?? '',
                 icon: Icons.email,
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -789,8 +794,10 @@ class _SettingsPageState extends State<SettingsPage> {
           label: 'First Name',
           initialValue: _firstName,
           enabled: isEditable,
-          validator: (value) => value!.isEmpty ? 'Enter first name' : null,
-          onSaved: (value) => _firstName = value!,
+          validator:
+              (value) =>
+                  value == null || value.isEmpty ? 'Enter first name' : null,
+          onSaved: (value) => _firstName = value ?? '',
           icon: Icons.person,
         ),
         SizedBox(height: 15),
@@ -798,8 +805,10 @@ class _SettingsPageState extends State<SettingsPage> {
           label: 'Last Name',
           initialValue: _lastName,
           enabled: isEditable,
-          validator: (value) => value!.isEmpty ? 'Enter last name' : null,
-          onSaved: (value) => _lastName = value!,
+          validator:
+              (value) =>
+                  value == null || value.isEmpty ? 'Enter last name' : null,
+          onSaved: (value) => _lastName = value ?? '',
           icon: Icons.person_outline,
         ),
         SizedBox(height: 15),
@@ -807,8 +816,8 @@ class _SettingsPageState extends State<SettingsPage> {
           label: 'Phone Number',
           initialValue: _phoneNumber,
           enabled: isEditable,
-          validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
-          onSaved: (value) => _phoneNumber = value!,
+          validator: null, // Phone is optional
+          onSaved: (value) => _phoneNumber = value ?? '',
           icon: Icons.phone,
           keyboardType: TextInputType.phone,
         ),
@@ -825,7 +834,7 @@ class _SettingsPageState extends State<SettingsPage> {
             }
             return null;
           },
-          onSaved: (value) => _email = value!,
+          onSaved: (value) => _email = value ?? '',
           icon: Icons.email,
           keyboardType: TextInputType.emailAddress,
         ),
@@ -837,7 +846,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required String label,
     required String initialValue,
     required bool enabled,
-    required String? Function(String?) validator,
+    required String? Function(String?)? validator,
     required void Function(String?) onSaved,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,

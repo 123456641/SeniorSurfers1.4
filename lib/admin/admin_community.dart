@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -222,8 +224,6 @@ class _AdminCommunityScreenState extends State<AdminCommunityScreen>
       if (replyExists == null) {
         throw Exception('Reply not found');
       }
-
-      final topicId = replyExists['topic_id'];
 
       // Get current user ID and check admin status
       final user = supabase.auth.currentUser;
@@ -789,7 +789,6 @@ class _AdminCommunityScreenState extends State<AdminCommunityScreen>
                           'By: ${authorName.isEmpty ? 'Unknown User' : authorName}',
                         ),
                         Text('Posted: ${_formatDateTime(topic['created_at'])}'),
-                        Text('Views: ${topic['view_count'] ?? 0}'),
                       ],
                     ),
                     isThreeLine: true,
@@ -802,7 +801,7 @@ class _AdminCommunityScreenState extends State<AdminCommunityScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  ButtonBar(
+                  OverflowBar(
                     alignment: MainAxisAlignment.end,
                     children: [
                       IconButton(
@@ -917,7 +916,7 @@ class _AdminCommunityScreenState extends State<AdminCommunityScreen>
                     ),
                     child: Text(reply['content'] ?? 'No content'),
                   ),
-                  ButtonBar(
+                  OverflowBar(
                     alignment: MainAxisAlignment.end,
                     children: [
                       IconButton(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart'; // Import go_router
 
 class LoginPagee extends StatefulWidget {
   const LoginPagee({super.key});
@@ -194,7 +195,8 @@ class _LoginPageeState extends State<LoginPagee>
         HapticFeedback.heavyImpact();
 
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/dashboard');
+          // Updated: Use GoRouter instead of Navigator
+          context.go('/dashboard');
         }
       }
     } on AuthException catch (e) {
@@ -521,7 +523,7 @@ class _LoginPageeState extends State<LoginPagee>
 
             const SizedBox(height: 40),
 
-            // Sign up option
+            // Sign up option - Updated to use GoRouter
             Center(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -529,7 +531,8 @@ class _LoginPageeState extends State<LoginPagee>
                   const Text('Don\'t have an account?'),
                   TextButton(
                     onPressed: () {
-                      Navigator.pushNamed(context, '/signup');
+                      // Updated: Use GoRouter instead of Navigator
+                      context.go('/signup');
                     },
                     child: const Text('Sign up'),
                   ),

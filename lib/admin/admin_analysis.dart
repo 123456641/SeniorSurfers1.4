@@ -27,15 +27,10 @@ class _AnalysisPageState extends State<AnalysisPage> {
   bool isLoadingChart = true;
 
   // Quiz game data for pie chart
-  Map<String, QuizResultData> quizResultsData = {
-    'Google Meet': QuizResultData(passed: 87, failed: 23),
-    'Zoom': QuizResultData(passed: 76, failed: 34),
-    'Gmail': QuizResultData(passed: 92, failed: 18),
-    'Viber': QuizResultData(passed: 64, failed: 46),
-    'WhatsApp': QuizResultData(passed: 83, failed: 27),
-    'Cliqq': QuizResultData(passed: 59, failed: 51),
-  };
-  String selectedQuizPlatform = 'Google Meet';
+  Map<String, QuizResultData> quizResultsData = {};
+  List<String> availablePlatforms = [];
+  String selectedQuizPlatform = '';
+  bool isLoadingQuizData = true;
 
   @override
   void initState() {
@@ -43,6 +38,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     // Fetch user count when the page loads
     fetchUserCount();
     fetchUserGrowthData();
+    fetchQuizResults();
   }
 
   // Function to fetch user count from Supabase
@@ -150,6 +146,56 @@ class _AnalysisPageState extends State<AnalysisPage> {
       debugPrint('Error fetching user growth data: $e');
       setState(() {
         isLoadingChart = false;
+      });
+    }
+  }
+
+  // Function to fetch quiz results data from Supabase
+  Future<void> fetchQuizResults() async {
+    try {
+      setState(() {
+        isLoadingQuizData = true;
+      });
+
+      // Query all quiz results
+      final response = await supabase
+          .from('quiz_results')
+          .select('platform, passed')
+          .order('created_at', ascending: false);
+
+      // Process the data by platform
+      Map<String, QuizResultData> resultsMap = {};
+      Set<String> platforms = {};
+
+      for (final result in response) {
+        final platform = result['platform'] as String;
+        final passed = result['passed'] as bool;
+
+        platforms.add(platform);
+
+        if (!resultsMap.containsKey(platform)) {
+          resultsMap[platform] = QuizResultData(passed: 0, failed: 0);
+        }
+
+        if (passed) {
+          resultsMap[platform]!.passed++;
+        } else {
+          resultsMap[platform]!.failed++;
+        }
+      }
+
+      // Update state with the fetched data
+      setState(() {
+        quizResultsData = resultsMap;
+        availablePlatforms = platforms.toList()..sort();
+        selectedQuizPlatform =
+            availablePlatforms.isNotEmpty ? availablePlatforms.first : '';
+        isLoadingQuizData = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching quiz results: $e');
+      setState(() {
+        isLoadingQuizData = false;
       });
     }
   }
@@ -302,6 +348,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 onPressed: () {
                   fetchUserCount();
                   fetchUserGrowthData();
+                  fetchQuizResults();
                 },
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Refresh'),
@@ -356,7 +403,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'New Users',
+                            'Senior Surfers',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -422,133 +469,317 @@ class _AnalysisPageState extends State<AnalysisPage> {
                           const SizedBox(height: 16),
 
                           // Platform selector
-                          SizedBox(
-                            height: 48,
-                            child: DropdownButtonFormField<String>(
-                              value: selectedQuizPlatform,
-                              decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
+                          if (isLoadingQuizData)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (availablePlatforms.isEmpty)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'No quiz data available',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey,
                                   ),
                                 ),
                               ),
-                              items:
-                                  quizResultsData.keys.map((platform) {
-                                    return DropdownMenuItem<String>(
-                                      value: platform,
-                                      child: Text(platform),
-                                    );
-                                  }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    selectedQuizPlatform = value;
-                                  });
-                                }
-                              },
+                            )
+                          else
+                            SizedBox(
+                              height: 48,
+                              child: DropdownButtonFormField<String>(
+                                value: selectedQuizPlatform,
+                                decoration: InputDecoration(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                ),
+                                items:
+                                    availablePlatforms.map((platform) {
+                                      return DropdownMenuItem<String>(
+                                        value: platform,
+                                        child: Text(platform),
+                                      );
+                                    }).toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      selectedQuizPlatform = value;
+                                    });
+                                  }
+                                },
+                              ),
                             ),
-                          ),
 
                           const SizedBox(height: 12),
 
                           // Pie chart and legend
                           Expanded(
-                            child: Row(
-                              children: [
-                                // Pie chart on the left
-                                Expanded(
-                                  flex: 3,
-                                  child: QuizResultsPieChart(
-                                    data:
-                                        quizResultsData[selectedQuizPlatform]!,
+                            child:
+                                isLoadingQuizData
+                                    ? const Center(
+                                      child: CircularProgressIndicator(),
+                                    )
+                                    : availablePlatforms.isEmpty
+                                    ? const Center(
+                                      child: Text(
+                                        'No quiz data to display',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontStyle: FontStyle.italic,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    )
+                                    : Row(
+                                      children: [
+                                        // Pie chart on the left
+                                        Expanded(
+                                          flex: 3,
+                                          child: QuizResultsPieChart(
+                                            data:
+                                                quizResultsData[selectedQuizPlatform]!,
+                                          ),
+                                        ),
+
+                                        // Legend on the right
+                                        Expanded(
+                                          flex: 2,
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              // Passed indicator
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    width: 16,
+                                                    height: 16,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                          shape:
+                                                              BoxShape.circle,
+                                                          color: Color(
+                                                            0xFF3B6EA5,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  const Text(
+                                                    'Passed',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 12),
+                                              // Failed indicator
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    width: 16,
+                                                    height: 16,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                          shape:
+                                                              BoxShape.circle,
+                                                          color: Color(
+                                                            0xFFE57373,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  const Text(
+                                                    'Failed',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 24),
+                                              // Stats
+                                              Text(
+                                                'Total: ${quizResultsData[selectedQuizPlatform]!.total}',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Pass Rate: ${quizResultsData[selectedQuizPlatform]!.passRate.toStringAsFixed(1)}%',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF3B6EA5),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Additional Quiz Analytics
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 20.0),
+                      padding: const EdgeInsets.all(16.0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12.0),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: const Color(0xFF3B6EA5).withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Platform Performance Overview',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF3B6EA5),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Comparative analysis of all platforms',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (isLoadingQuizData)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (availablePlatforms.isEmpty)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 20.0),
+                                child: Text(
+                                  'No quiz data available to compare',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey,
                                   ),
                                 ),
-
-                                // Legend on the right
-                                Expanded(
-                                  flex: 2,
+                              ),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: availablePlatforms.length,
+                              itemBuilder: (context, index) {
+                                final platform = availablePlatforms[index];
+                                final data = quizResultsData[platform]!;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
                                   child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      // Passed indicator
-                                      Row(
-                                        children: [
-                                          Container(
-                                            width: 16,
-                                            height: 16,
-                                            decoration: const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Color(0xFF3B6EA5),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            'Passed',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      // Failed indicator
-                                      Row(
-                                        children: [
-                                          Container(
-                                            width: 16,
-                                            height: 16,
-                                            decoration: const BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Color(0xFFE57373),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            'Failed',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 24),
-                                      // Stats
                                       Text(
-                                        'Total: ${quizResultsData[selectedQuizPlatform]!.total}',
+                                        platform,
                                         style: const TextStyle(
-                                          fontSize: 14,
+                                          fontSize: 16,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        'Pass Rate: ${quizResultsData[selectedQuizPlatform]!.passRate.toStringAsFixed(1)}%',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF3B6EA5),
-                                        ),
+                                      LinearProgressIndicator(
+                                        value: data.passed / data.total,
+                                        backgroundColor: const Color(
+                                          0xFFE57373,
+                                        ).withOpacity(0.3),
+                                        valueColor:
+                                            const AlwaysStoppedAnimation<Color>(
+                                              Color(0xFF3B6EA5),
+                                            ),
+                                        minHeight: 10,
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Passed: ${data.passed}',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Color.fromARGB(
+                                                255,
+                                                55,
+                                                190,
+                                                96,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            'Failed: ${data.failed}',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Color(0xFFE57373),
+                                            ),
+                                          ),
+                                          Text(
+                                            'Pass Rate: ${data.passRate.toStringAsFixed(1)}%',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -621,6 +852,19 @@ class PieChartPainter extends CustomPainter {
     final Offset center = Offset(size.width / 2, size.height / 2);
     final double radius = math.min(size.width, size.height) * 0.4;
 
+    // Handle edge case where there's no data
+    if (total <= 0) {
+      // Draw empty circle with dotted border
+      final Paint emptyPaint =
+          Paint()
+            ..color = Colors.grey.shade300
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2;
+
+      canvas.drawCircle(center, radius, emptyPaint);
+      return;
+    }
+
     // Draw passed section
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
@@ -659,11 +903,11 @@ class PieChartPainter extends CustomPainter {
 // Data Classes
 
 class QuizResultData {
-  final int passed;
-  final int failed;
+  int passed;
+  int failed;
 
   QuizResultData({required this.passed, required this.failed});
 
   int get total => passed + failed;
-  double get passRate => (passed / total) * 100;
+  double get passRate => total > 0 ? (passed / total) * 100 : 0;
 }

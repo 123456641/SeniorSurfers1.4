@@ -33,7 +33,6 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
       });
 
       // Fetch forum topics with user information
-      // If using the view approach, replace 'users' with 'user_profiles'
       final response = await supabase
           .from('forum_topics')
           .select('''
@@ -61,138 +60,181 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen width to determine layout
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 600; // Threshold for wide screens
+
     return Scaffold(
       appBar: const HeaderWidget(),
       body: RefreshIndicator(
         onRefresh: _loadForumTopics,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, // Align content to left
-          children: [
-            // Title: Community Forum
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-              child: Text(
-                'Community Forum',
-                style: const TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Roboto',
-                  color: Color(0xFF27445D),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Center(
+              child: Container(
+                // Limit width on larger screens for better readability
+                constraints: BoxConstraints(
+                  maxWidth: isWideScreen ? 900 : double.infinity,
                 ),
-                textAlign: TextAlign.left,
-              ),
-            ),
-
-            // Dashboard & Create Topic Buttons
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreateTopicPage(),
-                        ),
-                      ).then((_) => _loadForumTopics());
-                    },
-                    child: const Text('Start New Topic'),
-                  ),
-                ],
-              ),
-            ),
-
-            // Show error message if any
-            if (_errorMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  _errorMessage,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-
-            // Display forum topics
-            Expanded(
-              child:
-                  _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _forumTopics.isEmpty
-                      ? const Center(
-                        child: Text('No topics yet. Be the first to post!'),
-                      )
-                      : ListView.builder(
-                        itemCount: _forumTopics.length,
-                        itemBuilder: (context, index) {
-                          final topic = _forumTopics[index];
-                          final user = topic['users'] as Map<String, dynamic>;
-                          final fullName =
-                              '${user['first_name']} ${user['last_name']}';
-                          final createdAt = DateTime.parse(topic['created_at']);
-                          final timeAgo = timeago.format(createdAt);
-
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 8.0,
-                              vertical: 4.0,
-                            ),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundImage:
-                                    user['profile_picture_url'] != null
-                                        ? NetworkImage(
-                                          user['profile_picture_url'],
-                                        )
-                                        : null,
-                                child:
-                                    user['profile_picture_url'] == null
-                                        ? Text(fullName[0])
-                                        : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title and Create Topic button in a responsive row
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Title that adapts to available space
+                          Expanded(
+                            child: Text(
+                              'Community Forum',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 40 : 28,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Roboto',
+                                color: const Color(0xFF27445D),
                               ),
-                              title: Text(
-                                topic['title'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                              textAlign: TextAlign.left,
+                            ),
+                          ),
+
+                          // Create Topic Button
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isWideScreen ? 16.0 : 12.0,
+                                  vertical: isWideScreen ? 12.0 : 8.0,
                                 ),
                               ),
-                              subtitle: Text('Posted by $fullName • $timeAgo'),
-                              trailing: const Icon(Icons.arrow_forward_ios),
-                              onTap: () {
+                              onPressed: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder:
-                                        (context) => TopicDetailPage(
-                                          topicId: topic['id'],
-                                          topicTitle: topic['title'],
-                                        ),
+                                        (context) => const CreateTopicPage(),
                                   ),
                                 ).then((_) => _loadForumTopics());
                               },
+                              icon: const Icon(Icons.add),
+                              label: Text(
+                                isWideScreen ? 'Start New Topic' : 'New Topic',
+                              ),
                             ),
-                          );
-                        },
+                          ),
+                        ],
                       ),
-            ),
-          ],
+                    ),
+
+                    // Show error message if any
+                    if (_errorMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          _errorMessage,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+
+                    // Display forum topics
+                    Expanded(
+                      child:
+                          _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _forumTopics.isEmpty
+                              ? const Center(
+                                child: Text(
+                                  'No topics yet. Be the first to post!',
+                                ),
+                              )
+                              : ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                ),
+                                itemCount: _forumTopics.length,
+                                itemBuilder: (context, index) {
+                                  final topic = _forumTopics[index];
+                                  final user =
+                                      topic['users'] as Map<String, dynamic>;
+                                  final fullName =
+                                      '${user['first_name']} ${user['last_name']}';
+                                  final createdAt = DateTime.parse(
+                                    topic['created_at'],
+                                  );
+                                  final timeAgo = timeago.format(createdAt);
+
+                                  return Card(
+                                    margin: EdgeInsets.symmetric(
+                                      horizontal: isWideScreen ? 16.0 : 8.0,
+                                      vertical: 4.0,
+                                    ),
+                                    elevation: 2,
+                                    child: ListTile(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 16.0,
+                                            vertical: 8.0,
+                                          ),
+                                      leading: CircleAvatar(
+                                        backgroundImage:
+                                            user['profile_picture_url'] != null
+                                                ? NetworkImage(
+                                                  user['profile_picture_url'],
+                                                )
+                                                : null,
+                                        child:
+                                            user['profile_picture_url'] == null
+                                                ? Text(fullName[0])
+                                                : null,
+                                      ),
+                                      title: Text(
+                                        topic['title'],
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 4.0,
+                                        ),
+                                        child: Text(
+                                          'Posted by $fullName • $timeAgo',
+                                        ),
+                                      ),
+                                      trailing: const Icon(
+                                        Icons.arrow_forward_ios,
+                                      ),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => TopicDetailPage(
+                                                  topicId: topic['id'],
+                                                  topicTitle: topic['title'],
+                                                ),
+                                          ),
+                                        ).then((_) => _loadForumTopics());
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CreateTopicPage()),
-          ).then((_) => _loadForumTopics());
-        },
-        backgroundColor: Colors.green,
-        child: const Icon(Icons.add),
-      ),
+      // Removed the floating action button as requested
     );
   }
 }
@@ -278,56 +320,68 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen size for responsive layout
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 600;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Create New Topic')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Topic Title',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  return null;
-                },
+      body: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: isWideScreen ? 800 : screenWidth * 0.95,
+              minHeight: 200,
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Topic Title',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter a title';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextFormField(
+                    controller: _contentController,
+                    decoration: const InputDecoration(
+                      labelText: 'Content',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: 10,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter content';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24.0),
+                  ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitTopic,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    ),
+                    child:
+                        _isSubmitting
+                            ? const CircularProgressIndicator()
+                            : const Text('Create Topic'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16.0),
-              TextFormField(
-                controller: _contentController,
-                decoration: const InputDecoration(
-                  labelText: 'Content',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                maxLines: 10,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter content';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24.0),
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitTopic,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                ),
-                child:
-                    _isSubmitting
-                        ? const CircularProgressIndicator()
-                        : const Text('Create Topic'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -531,15 +585,18 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
   void dispose() {
     _replyController.dispose();
     // Cancel subscription when widget is disposed
-    _repliesSubscription
-        ?.unsubscribe(); // Use unsubscribe() instead of remove()
+    _repliesSubscription?.unsubscribe();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Get screen size for responsive layout
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth > 600;
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.topicTitle)),
+      appBar: AppBar(),
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -563,111 +620,138 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
                   ],
                 ),
               )
-              : Column(
-                children: [
-                  // Topic details
-                  if (_topicDetails != null) _buildTopicCard(),
-
-                  // Replies header
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Replies',
-                          style: TextStyle(
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0,
-                            vertical: 4.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(16.0),
-                          ),
-                          child: Text(
-                            '${_replies.length}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
+              : Center(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: isWideScreen ? 900 : double.infinity,
                   ),
+                  child: Column(
+                    children: [
+                      // Topic details
+                      if (_topicDetails != null) _buildTopicCard(isWideScreen),
 
-                  // Replies list
-                  Expanded(
-                    child:
-                        _replies.isEmpty
-                            ? const Center(
-                              child: Text(
-                                'No replies yet. Be the first to reply!',
+                      // Replies header
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Replies',
+                              style: TextStyle(
+                                fontSize: isWideScreen ? 20.0 : 18.0,
+                                fontWeight: FontWeight.bold,
                               ),
-                            )
-                            : ListView.builder(
-                              itemCount: _replies.length,
-                              itemBuilder: (context, index) {
-                                // Check if reply still exists before building card
-                                final reply = _replies[index];
-                                if (reply == null) return const SizedBox();
-                                return _buildReplyCard(reply);
-                              },
                             ),
-                  ),
+                            const SizedBox(width: 8.0),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 4.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(16.0),
+                              ),
+                              child: Text(
+                                '${_replies.length}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                  // Reply input
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _replyController,
-                            decoration: const InputDecoration(
-                              hintText: 'Write a reply...',
-                              border: OutlineInputBorder(),
+                      // Replies list
+                      Expanded(
+                        child:
+                            _replies.isEmpty
+                                ? const Center(
+                                  child: Text(
+                                    'No replies yet. Be the first to reply!',
+                                  ),
+                                )
+                                : ListView.builder(
+                                  padding: const EdgeInsets.only(bottom: 80),
+                                  itemCount: _replies.length,
+                                  itemBuilder: (context, index) {
+                                    // Check if reply still exists before building card
+                                    final reply = _replies[index];
+                                    if (reply == null) return const SizedBox();
+                                    return _buildReplyCard(reply, isWideScreen);
+                                  },
+                                ),
+                      ),
+
+                      // Reply input
+                      Container(
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, -2),
                             ),
-                            maxLines: 3,
-                            minLines: 1,
-                          ),
+                          ],
                         ),
-                        const SizedBox(width: 8.0),
-                        IconButton(
-                          onPressed: _isSubmittingReply ? null : _submitReply,
-                          icon:
-                              _isSubmittingReply
-                                  ? const CircularProgressIndicator()
-                                  : const Icon(Icons.send),
-                          color: Colors.blue,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _replyController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Write a reply...',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                maxLines: 3,
+                                minLines: 1,
+                              ),
+                            ),
+                            const SizedBox(width: 8.0),
+                            IconButton(
+                              onPressed:
+                                  _isSubmittingReply ? null : _submitReply,
+                              icon:
+                                  _isSubmittingReply
+                                      ? const CircularProgressIndicator()
+                                      : const Icon(Icons.send),
+                              color: Colors.blue,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
     );
   }
 
-  Widget _buildTopicCard() {
+  Widget _buildTopicCard(bool isWideScreen) {
     final user = _topicDetails!['users'] as Map<String, dynamic>;
     final fullName = '${user['first_name']} ${user['last_name']}';
     final createdAt = DateTime.parse(_topicDetails!['created_at']);
     final timeAgo = timeago.format(createdAt);
 
     return Card(
-      margin: const EdgeInsets.all(8.0),
+      margin: EdgeInsets.all(isWideScreen ? 16.0 : 8.0),
+      elevation: 3,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(isWideScreen ? 24.0 : 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
+                  radius: isWideScreen ? 24 : 20,
                   backgroundImage:
                       user['profile_picture_url'] != null
                           ? NetworkImage(user['profile_picture_url'])
@@ -677,42 +761,52 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
                           ? Text(fullName[0])
                           : null,
                 ),
-                const SizedBox(width: 8.0),
+                const SizedBox(width: 12.0),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       fullName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isWideScreen ? 16.0 : 14.0,
+                      ),
                     ),
                     Text(
                       timeAgo,
                       style: TextStyle(
                         color: Colors.grey.shade600,
-                        fontSize: 12.0,
+                        fontSize: isWideScreen ? 14.0 : 12.0,
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 16.0),
+            SizedBox(height: isWideScreen ? 24.0 : 16.0),
             Text(
               _topicDetails!['title'],
-              style: const TextStyle(
-                fontSize: 20.0,
+              style: TextStyle(
+                fontSize: isWideScreen ? 24.0 : 20.0,
                 fontWeight: FontWeight.bold,
+                color: const Color(0xFF27445D),
               ),
             ),
-            const SizedBox(height: 8.0),
-            Text(_topicDetails!['content']),
+            SizedBox(height: isWideScreen ? 16.0 : 12.0),
+            Text(
+              _topicDetails!['content'],
+              style: TextStyle(
+                fontSize: isWideScreen ? 16.0 : 14.0,
+                height: 1.5,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReplyCard(Map<String, dynamic> reply) {
+  Widget _buildReplyCard(Map<String, dynamic> reply, bool isWideScreen) {
     // Add null safety checks for user info
     final user = reply['users'] as Map<String, dynamic>? ?? {};
     final firstName = user['first_name'] ?? 'Unknown';
@@ -726,16 +820,21 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
         currentUser != null && currentUser.id == user['id'];
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      margin: EdgeInsets.symmetric(
+        horizontal: isWideScreen ? 16.0 : 8.0,
+        vertical: 4.0,
+      ),
       color: isCurrentUserReply ? Colors.blue.shade50 : null,
+      elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: EdgeInsets.all(isWideScreen ? 16.0 : 12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
+                  radius: isWideScreen ? 20 : 18,
                   backgroundImage:
                       user['profile_picture_url'] != null
                           ? NetworkImage(user['profile_picture_url'])
@@ -825,8 +924,14 @@ class _TopicDetailPageState extends State<TopicDetailPage> {
                 ],
               ],
             ),
-            const SizedBox(height: 8.0),
-            Text(reply['content']),
+            SizedBox(height: isWideScreen ? 12.0 : 8.0),
+            Text(
+              reply['content'],
+              style: TextStyle(
+                fontSize: isWideScreen ? 16.0 : 14.0,
+                height: 1.4,
+              ),
+            ),
           ],
         ),
       ),

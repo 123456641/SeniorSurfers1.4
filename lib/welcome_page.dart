@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -13,13 +14,28 @@ class _WelcomePageState extends State<WelcomePage> {
 
   void _handleSecretTap() {
     final now = DateTime.now();
-    if (_firstTapTime == null || now.difference(_firstTapTime!) > Duration(seconds: 3)) {
+
+    // Reset tap count if more than 3 seconds have passed since first tap
+    if (_firstTapTime == null ||
+        now.difference(_firstTapTime!) > const Duration(seconds: 3)) {
       _tapCount = 1;
       _firstTapTime = now;
     } else {
       _tapCount++;
+
+      // If 5 taps reached, navigate to admin login
       if (_tapCount == 5) {
-        Navigator.pushNamed(context, '/admin-login');  // Navigate to Admin Login
+        // Provide subtle feedback (optional)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Accessing admin area...'),
+            duration: Duration(seconds: 1),
+            backgroundColor: Colors.blueGrey,
+          ),
+        );
+
+        // Navigate to admin login page
+        context.go('/admin-login');
       }
     }
   }
@@ -71,31 +87,29 @@ class _WelcomePageState extends State<WelcomePage> {
                     const Text(
                       'Helping you stay connected and confident with technology.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: Colors.black54,
-                      ),
+                      style: TextStyle(fontSize: 20, color: Colors.black54),
                     ),
                     const SizedBox(height: 40),
 
                     // Get Started Button
                     ElevatedButton(
                       onPressed: () {
-                        Navigator.pushNamed(context, '/login');
+                        // Using GoRouter instead of Navigator
+                        context.go('/login');
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueAccent,
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 40,
+                          vertical: 16,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
                       child: const Text(
                         'Get Started',
-                        style: TextStyle(
-                          fontSize: 22,
-                          color: Colors.white,
-                        ),
+                        style: TextStyle(fontSize: 22, color: Colors.white),
                       ),
                     ),
                   ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class HeaderWidget extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -19,7 +20,9 @@ class HeaderWidget extends StatelessWidget implements PreferredSizeWidget {
           showBackButton
               ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  context.pop(); // This goes back to the previous page
+                },
               )
               : null,
       title: Row(

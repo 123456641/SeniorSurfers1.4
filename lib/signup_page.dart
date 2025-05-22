@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -95,6 +96,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
+    // Enhanced validation
     if (firstName.isEmpty || !_nameRegex.hasMatch(firstName)) {
       _showSnackBar('First name must only contain letters and spaces');
       return;
@@ -102,6 +104,33 @@ class _SignUpPageState extends State<SignUpPage> {
 
     if (lastName.isEmpty || !_nameRegex.hasMatch(lastName)) {
       _showSnackBar('Last name must only contain letters and spaces');
+      return;
+    }
+
+    // Email validation
+    if (email.isEmpty || !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      _showSnackBar('Please enter a valid email address');
+      return;
+    }
+
+    // Phone validation
+    if (_phoneController.text.trim().isEmpty) {
+      _showSnackBar('Phone number is required');
+      return;
+    }
+
+    final phoneRegex = _getPhoneRegexForCountry(_selectedCountry['code']);
+    if (!phoneRegex.hasMatch(phone)) {
+      setState(() {
+        _phoneErrorText =
+            'Please enter a valid ${_selectedCountry['name']} phone number';
+      });
+      return;
+    }
+
+    // Password validation
+    if (password.isEmpty) {
+      _showSnackBar('Password is required');
       return;
     }
 
@@ -122,19 +151,14 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    final phoneRegex = _getPhoneRegexForCountry(_selectedCountry['code']);
-    if (!phoneRegex.hasMatch(phone)) {
-      setState(() {
-        _phoneErrorText =
-            'Please enter a valid ${_selectedCountry['name']} phone number';
-      });
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      // Step 1: Sign up with auth - this creates the auth user
+      print('Starting sign up process...');
+      print('Email: $email');
+      print('Phone: $phone');
+
+      // Step 1: Sign up with auth
       final authResponse = await _supabase.auth.signUp(
         email: email,
         password: password,
@@ -142,39 +166,62 @@ class _SignUpPageState extends State<SignUpPage> {
           'first_name': firstName,
           'last_name': lastName,
           'phone': phone,
-          'email': email, // Make sure email is in the metadata
+          'email': email,
         },
       );
 
-      if (authResponse.user?.id == null) {
-        throw Exception('User creation failed - no user ID returned');
+      print('Auth response received');
+      print('User ID: ${authResponse.user?.id}');
+      print('Session: ${authResponse.session != null ? 'exists' : 'null'}');
+
+      if (authResponse.user == null) {
+        throw Exception('User creation failed - no user returned from auth');
       }
 
-      // No need to manually insert into users table!
-      // Supabase has a "users" table trigger that automatically
-      // creates a profile when a new user signs up
-
+      // Check if email confirmation is required
       if (authResponse.session == null) {
         _showSnackBar(
-          'Account created! Please check your email to confirm.',
+          'Account created! Please check your email to confirm your account before signing in.',
           color: Colors.green,
-          duration: 4,
+          duration: 6,
         );
         await Future.delayed(const Duration(seconds: 3));
-        if (mounted) Navigator.pushReplacementNamed(context, '/login');
+        if (mounted) context.go('/login');
       } else {
-        if (mounted) Navigator.pushReplacementNamed(context, '/home');
+        // User is automatically signed in
+        _showSnackBar(
+          'Account created successfully! Welcome!',
+          color: Colors.green,
+          duration: 3,
+        );
+        if (mounted) context.go('/home');
       }
     } on AuthException catch (e) {
-      _showSnackBar(
-        e.message.contains('User already registered')
-            ? 'Email already in use. Try logging in.'
-            : 'Signup failed: ${e.message}',
-      );
+      print('AuthException: ${e.message}');
+      String errorMessage;
+
+      if (e.message.toLowerCase().contains('user already registered') ||
+          e.message.toLowerCase().contains('already registered')) {
+        errorMessage =
+            'This email is already registered. Please try logging in instead.';
+      } else if (e.message.toLowerCase().contains('invalid email')) {
+        errorMessage = 'Please enter a valid email address.';
+      } else if (e.message.toLowerCase().contains('password')) {
+        errorMessage =
+            'Password requirements not met. Please check your password.';
+      } else if (e.message.toLowerCase().contains('rate limit')) {
+        errorMessage = 'Too many attempts. Please wait a moment and try again.';
+      } else {
+        errorMessage = 'Sign up failed: ${e.message}';
+      }
+
+      _showSnackBar(errorMessage);
     } on PostgrestException catch (e) {
+      print('PostgrestException: ${e.message}');
       _showSnackBar('Database error: ${e.message}');
     } catch (e) {
-      _showSnackBar('An unexpected error occurred: ${e.toString()}');
+      print('Unexpected error: $e');
+      _showSnackBar('An unexpected error occurred. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -186,6 +233,8 @@ class _SignUpPageState extends State<SignUpPage> {
         content: Text(message),
         backgroundColor: color ?? Colors.red,
         duration: Duration(seconds: duration),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -193,15 +242,15 @@ class _SignUpPageState extends State<SignUpPage> {
   RegExp _getPhoneRegexForCountry(String countryCode) {
     switch (countryCode) {
       case 'US':
-        return RegExp(r'^\+1\d{10}$');
+        return RegExp(r'^\+1[0-9]{10}$');
       case 'CN':
-        return RegExp(r'^\+86\d{11}$');
+        return RegExp(r'^\+86[0-9]{11}$');
       case 'JP':
-        return RegExp(r'^\+81\d{9,10}$');
+        return RegExp(r'^\+81[0-9]{9,10}$');
       case 'PH':
-        return RegExp(r'^\+63\d{9,10}$');
+        return RegExp(r'^\+63[0-9]{9,10}$');
       default:
-        return RegExp(r'^\+?\d{8,15}$');
+        return RegExp(r'^\+[0-9]{8,15}$');
     }
   }
 
@@ -213,7 +262,6 @@ class _SignUpPageState extends State<SignUpPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        // Making bottom sheet responsive
         return FractionallySizedBox(
           heightFactor: MediaQuery.of(context).size.height > 600 ? 0.5 : 0.7,
           child: Container(
@@ -299,7 +347,6 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Get the screen width to determine layout
     final screenWidth = MediaQuery.of(context).size.width;
     final bool isTabletOrDesktop = screenWidth > 600;
 
@@ -310,7 +357,7 @@ class _SignUpPageState extends State<SignUpPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black54),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -318,12 +365,11 @@ class _SignUpPageState extends State<SignUpPage> {
           child: SingleChildScrollView(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // Responsive container width
                 double containerWidth = screenWidth;
                 if (isTabletOrDesktop) {
                   containerWidth = screenWidth * 0.8;
                   if (screenWidth > 1200) {
-                    containerWidth = 900; // Max width for very large screens
+                    containerWidth = 900;
                   }
                 }
 
@@ -339,6 +385,17 @@ class _SignUpPageState extends State<SignUpPage> {
                       Image.asset(
                         'assets/images/seniorsurfersLogoNoName.png',
                         height: 100,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            height: 100,
+                            width: 100,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.image, size: 40),
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -453,11 +510,9 @@ class _SignUpPageState extends State<SignUpPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Already have an account?'),
+                  const Text('Already have an account? '),
                   TextButton(
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/login');
-                    },
+                    onPressed: () => context.go('/login'),
                     child: const Text('Log In'),
                   ),
                 ],
@@ -469,7 +524,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // Responsive name fields that stack on mobile and display side by side on larger screens
   Widget _buildNameFields(bool isTabletOrDesktop) {
     if (isTabletOrDesktop) {
       return Row(
@@ -501,7 +555,7 @@ class _SignUpPageState extends State<SignUpPage> {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
-        hintText: 'Enter your $label',
+        hintText: 'Enter your ${label.toLowerCase()}',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -526,7 +580,7 @@ class _SignUpPageState extends State<SignUpPage> {
       controller: _phoneController,
       decoration: InputDecoration(
         labelText: 'Phone Number',
-        hintText: 'Enter your number',
+        hintText: 'Enter your phone number',
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         errorText: _phoneErrorText,
         contentPadding: const EdgeInsets.symmetric(
@@ -565,21 +619,10 @@ class _SignUpPageState extends State<SignUpPage> {
         fillColor: Colors.white,
       ),
       keyboardType: TextInputType.phone,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-      ], // Only digits
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
       onChanged: (value) {
-        // Validate phone number format for the selected country
-        _getPhoneRegexForCountry(_selectedCountry['code'])
-            .toString()
-            .replaceAll(r'^\+\d+', '') // Remove dial code part from regex
-            .replaceAll(r'$', ''); // Remove end anchor
-
         setState(() {
-          _phoneErrorText =
-              RegExp(r'^[0-9]+$').hasMatch(value)
-                  ? null
-                  : 'Only digits allowed';
+          _phoneErrorText = null;
         });
       },
     );

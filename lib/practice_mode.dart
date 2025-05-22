@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'header_widget.dart';
 import 'dashboard.dart';
 import 'practice_mode_apps/GoogleMeetPage/googleMeet.dart';
@@ -48,7 +49,7 @@ class PracticeModePage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, '/progress'),
+                  onPressed: () => context.go('/progress'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF27445D),
                     foregroundColor: Colors.white,
@@ -73,6 +74,9 @@ class PracticeModePage extends StatelessWidget {
                         apps.map((app) {
                           return GestureDetector(
                             onTap: () {
+                              // For now, we'll keep using MaterialPageRoute for the app pages
+                              // since they don't appear to have dedicated routes in the router
+                              // You could add these to your router config if needed
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => app.page),

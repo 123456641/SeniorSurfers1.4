@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'games/chess/chess.dart';
-import 'games/solitaire.dart';
 import 'games/damma.dart';
 import 'games/googlemeet.dart';
 import 'header_widget.dart';
+import 'games/zoom.dart';
 
 class GamesPage extends StatelessWidget {
   const GamesPage({super.key});
@@ -19,18 +19,11 @@ class GamesPage extends StatelessWidget {
             'Test your knowledge with interactive quizzes inspired by Google Meet.',
       ),
       _GameItem(
-        name: 'Chess',
-        widget: const ChessGame(),
-        image: 'assets/images/games/chess.png',
+        name: 'Zoom ',
+        widget: const ZoomQuizGame(),
+        image: 'assets/images/zoomgame.png',
         description:
-            'Play the classic game of chess against the computer or a friend.',
-      ),
-      _GameItem(
-        name: 'Damma',
-        widget: const DammaGame(),
-        image: 'assets/images/games/damma.png',
-        description:
-            'Challenge yourself with this traditional strategic board game.',
+            'Test your knowledge with interactive quizzes inspired by Zoom',
       ),
     ];
 

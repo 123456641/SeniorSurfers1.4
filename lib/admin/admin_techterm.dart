@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'admin_dashboard.dart';
 
 class AdminTechTermsPage extends StatefulWidget {
   const AdminTechTermsPage({super.key});
@@ -53,19 +52,15 @@ class _AdminTechTermsPageState extends State<AdminTechTermsPage> {
           .select()
           .order('term');
 
-      if (response is List) {
-        final terms = response.whereType<Map<String, dynamic>>().toList();
+      final terms = response.whereType<Map<String, dynamic>>().toList();
 
-        print('Loaded ${terms.length} terms');
+      print('Loaded ${terms.length} terms');
 
-        setState(() {
-          allTerms = terms;
-          isLoading = false;
-        });
-      } else {
-        throw Exception('Unexpected response format');
-      }
-    } catch (e) {
+      setState(() {
+        allTerms = terms;
+        isLoading = false;
+      });
+        } catch (e) {
       print('Error loading terms: $e');
       setState(() {
         errorMessage = 'Error loading terms: $e';
