@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../tutorial/pdf_viewer_page.dart';
-import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class AddTutorialPage extends StatefulWidget {
   const AddTutorialPage({super.key});
@@ -36,6 +36,9 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   String? _thumbnailUrl;
   bool isUploadingThumbnail = false;
 
+  // Flutter Local Notifications instance
+  late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
+
   String _formatPlatformName(String platform) {
     return platform
         .split('_')
@@ -46,7 +49,55 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
   @override
   void initState() {
     super.initState();
+    _initializeNotifications();
     fetchTutorialFiles();
+  }
+
+  // Initialize Flutter Local Notifications
+  Future<void> _initializeNotifications() async {
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+          requestSoundPermission: false,
+          requestBadgePermission: false,
+          requestAlertPermission: false,
+        );
+
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsDarwin,
+        );
+
+    await _flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        // Handle notification tap
+        print('Notification tapped: ${response.payload}');
+      },
+    );
+
+    // Request permissions for Android 13+
+    if (!kIsWeb && Platform.isAndroid) {
+      await _flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.requestNotificationsPermission();
+    }
+
+    // Request permissions for iOS
+    if (!kIsWeb && Platform.isIOS) {
+      await _flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
   }
 
   @override
@@ -1511,17 +1562,36 @@ class _AddTutorialPageState extends State<AddTutorialPage> {
     );
   }
 
-  // Send local notification
+  // Send local notification using Flutter Local Notifications
   Future<void> _sendNotification(String title, String body) async {
-    await AwesomeNotifications().createNotification(
-      content: NotificationContent(
-        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-        channelKey:
-            'basic_channel', // Must match the channel created in main.dart
-        title: title,
-        body: body,
-        notificationLayout: NotificationLayout.Default,
-      ),
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+          'tutorial_channel',
+          'Tutorial Notifications',
+          channelDescription: 'Notification channel for tutorial uploads',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: false,
+        );
+
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+        DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+    );
+
+    await _flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title,
+      body,
+      platformChannelSpecifics,
+      payload: 'tutorial_notification',
     );
   }
 

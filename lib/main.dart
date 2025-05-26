@@ -1,11 +1,14 @@
+// File: Updated main.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart'; // Add this import
+import 'providers/font_size_provider.dart'; // Add this import
 import 'welcome_page.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
 import 'dashboard.dart';
-import 'tutorial_page.dart';
+import 'tutorial_page_mobile.dart' as mobile;
 import 'games_page.dart';
 import 'progress/progress.dart';
 import 'community forum/comdboard.dart';
@@ -13,7 +16,7 @@ import 'package:senior_surfers/settings_page.dart';
 import 'achievements_page.dart';
 import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetwcpage1.dart';
 import 'practice_mode.dart';
-import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'notification/notification.dart';
 import 'games/googlemeet.dart';
 import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetwcpage.dart';
@@ -27,6 +30,16 @@ import 'games/zoom.dart';
 import 'practice_mode_apps/GoogleMeetPage/joinmeet.dart';
 import 'practice_mode_apps/GoogleMeetPage/joinmeet2.dart';
 import 'practice_mode_apps/GoogleMeetPage/joinmeet3.dart';
+import 'tutorial_page.dart';
+import 'header_widget.dart';
+import 'homepage.dart';
+import 'package:provider/provider.dart';
+import 'providers/font_size_provider.dart';
+import 'interactivegames/gmeet.dart';
+
+// Global instance for notifications
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,60 +51,91 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjbmdsaG16ZmdjYmllZWZsemlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI3OTk4MzksImV4cCI6MjA1ODM3NTgzOX0.1HL3EQ_dMoLQoK5fF6A9jY3Uu2BGi99DJeVSAV0bMbs',
   );
 
-  // Initialize notifications
-  await AwesomeNotifications().initialize(null, [
-    NotificationChannel(
-      channelKey: 'tutorial_channel',
-      channelName: 'Tutorial Notifications',
-      channelDescription: 'Notification channel for tutorial uploads',
-      defaultColor: const Color(0xFF3B6EA5),
-      ledColor: Colors.white,
-    ),
-  ], debug: true);
+  // Initialize notifications...
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const DarwinInitializationSettings initializationSettingsDarwin =
+      DarwinInitializationSettings();
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsDarwin,
+  );
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
-  runApp(const MyApp());
+  // Wrap the app with providers
+  runApp(
+    MultiProvider(
+      providers: [ChangeNotifierProvider(create: (_) => FontSizeProvider())],
+      child: const MyApp(),
+    ),
+  );
 }
 
-// Create a GoRouter configuration
+// ... (keep all your existing GoRouter configuration exactly the same) ...
 final GoRouter _router = GoRouter(
   debugLogDiagnostics: true,
-  initialLocation: '/',
+  initialLocation: '/', // This stays as '/' which will show Welcome page
   redirect: (BuildContext context, GoRouterState state) {
     // Get the current user
     final supabase = Supabase.instance.client;
     final currentUser = supabase.auth.currentUser;
 
+    // List of public routes that don't require authentication
+    final publicRoutes = ['/', '/login', '/signup', '/admin-login'];
+    final currentPath = state.matchedLocation;
+
     // Check if the user is trying to access admin routes
     final isGoingToAdminRoute =
-        state.matchedLocation.startsWith('/admin') &&
-        state.matchedLocation != '/admin-login';
+        currentPath.startsWith('/admin') && currentPath != '/admin-login';
 
-    // If user is not logged in and trying to access admin routes, redirect to admin login
+    // Admin route handling
     if (currentUser == null && isGoingToAdminRoute) {
       return '/admin-login';
     }
-
-    // If user is logged in and going to admin login, redirect to admin dashboard
-    if (currentUser != null && state.matchedLocation == '/admin-login') {
+    if (currentUser != null && currentPath == '/admin-login') {
       return '/admin/analysis';
+    }
+
+    // UPDATED: User authentication handling - Always show welcome page first
+    if (currentUser == null) {
+      // User not logged in - allow access to public routes
+      if (publicRoutes.contains(currentPath)) {
+        return null; // Show the requested public route (including welcome page)
+      } else {
+        return '/'; // Redirect to welcome page for protected routes
+      }
+    } else {
+      // User is logged in
+      // REMOVED: Auto-redirect to dashboard - let users navigate manually
+      // Only redirect login/signup pages since user is already logged in
+      if (currentPath == '/login' || currentPath == '/signup') {
+        return '/dashboard'; // Redirect logged-in users away from login/signup
+      }
+      // Allow logged-in users to visit welcome page if they want
     }
 
     // No redirect needed
     return null;
   },
   routes: [
-    // User routes
+    // UPDATED: Welcome page as the main landing page
     GoRoute(path: '/', builder: (context, state) => const WelcomePage()),
+
+    // Authentication routes
     GoRoute(path: '/login', builder: (context, state) => const LoginPagee()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpPage()),
+
+    // Main app routes (require authentication)
     GoRoute(
       path: '/dashboard',
       builder: (context, state) => const DashboardPage(),
     ),
+    GoRoute(path: '/header', builder: (context, state) => const HeaderWidget()),
+    GoRoute(path: '/home1', builder: (context, state) => const HomePage1()),
     GoRoute(path: '/tutorials', builder: (context, state) => TutorialPage()),
     GoRoute(path: '/practice', builder: (context, state) => PracticeModePage()),
     GoRoute(path: '/settingsD', builder: (context, state) => SettingsPage()),
-    GoRoute(path: '/games', builder: (context, state) => const GamesPage()),
+    GoRoute(path: '/games', builder: (context, state) => GamesPage()),
     GoRoute(
       path: '/notification',
       builder: (context, state) => NotificationPage(),
@@ -113,18 +157,18 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => AchievementsPage(),
     ),
     GoRoute(
+      path: '/gmeet-tutorial',
+      builder: (context, state) => const GoogleMeetTutorial(),
+    ),
+    GoRoute(
       path: '/gmeetDashboard',
       builder: (context, state) => const Gmeet(),
     ),
     GoRoute(
       path: '/gmeetgame',
-      builder: (context, state) => const GoogleMeetQuizGame(),
+      builder: (context, state) => const GoogleMeetAdventureGame(),
     ),
     GoRoute(path: '/gmeetSignin1', builder: (context, state) => const GMeet2()),
-    GoRoute(
-      path: '/zoomgame',
-      builder: (context, state) => const ZoomQuizGame(),
-    ),
     GoRoute(path: '/joinmeet1', builder: (context, state) => const JoinMeet1()),
     GoRoute(path: '/joinmeet2', builder: (context, state) => const JoinMeet2()),
     GoRoute(
@@ -132,13 +176,11 @@ final GoRouter _router = GoRouter(
       builder: (context, state) => const JoinMeet3Screen(),
     ),
 
-    // Admin login route (standalone)
+    // Admin routes
     GoRoute(
       path: '/admin-login',
       builder: (context, state) => const AdminLoginPage(),
     ),
-
-    // Admin dashboard routes using ShellRoute
     ShellRoute(
       builder: (context, state, child) {
         return AdminDashboard(child: child);
@@ -170,11 +212,49 @@ final GoRouter _router = GoRouter(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('The requested page was not found.'),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => context.go('/dashboard'),
-                child: const Text('Go to Dashboard'),
+              Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Page Not Found',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The requested page "${state.matchedLocation}" was not found.',
+                style: TextStyle(color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => context.go('/'),
+                icon: const Icon(Icons.home),
+                label: const Text('Go to Welcome'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27445D),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  // Check if user is logged in to show appropriate page
+                  final supabase = Supabase.instance.client;
+                  final currentUser = supabase.auth.currentUser;
+                  if (currentUser != null) {
+                    context.go('/dashboard'); // Go to dashboard if logged in
+                  } else {
+                    context.go('/'); // Go to welcome page if not logged in
+                  }
+                },
+                child: const Text('Go to Home'),
               ),
             ],
           ),
@@ -187,95 +267,43 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Senior Surfers',
-      debugShowCheckedModeBanner: false,
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        // Base theme configuration
+        final baseTheme = ThemeData(
+          primarySwatch: Colors.blue,
+          brightness: Brightness.light,
+          scaffoldBackgroundColor: Colors.white,
+          textTheme: const TextTheme(
+            bodyMedium: TextStyle(color: Colors.black),
+            bodyLarge: TextStyle(color: Colors.black),
+            titleMedium: TextStyle(color: Colors.black),
+            titleLarge: TextStyle(color: Colors.black),
+          ),
+          cardColor: Colors.white,
+          dialogBackgroundColor: Colors.white,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.white,
+            foregroundColor: Color(0xFF27445D),
+            elevation: 0,
+          ),
+        );
 
-      // Set up light theme with your app's colors
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        // Force light brightness
-        brightness: Brightness.light,
-        // Set default scaffold background to white
-        scaffoldBackgroundColor: Colors.white,
-        // Text color theme
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: Colors.black),
-          bodyLarge: TextStyle(color: Colors.black),
-          titleMedium: TextStyle(color: Colors.black),
-          titleLarge: TextStyle(color: Colors.black),
-        ),
-        // Card and dialog colors
-        cardColor: Colors.white,
-        dialogBackgroundColor: Colors.white,
-        // AppBar theme
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF27445D),
-          elevation: 0,
-        ),
-      ),
+        // Get scaled theme from FontSizeProvider
+        final scaledTheme =
+            fontProvider.isLoading
+                ? baseTheme
+                : fontProvider.getScaledTheme(baseTheme);
 
-      // Force light theme even when system is in dark mode
-      darkTheme: ThemeData(
-        // Use the same settings as light theme
-        primarySwatch: Colors.blue,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.white,
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: Colors.black),
-          bodyLarge: TextStyle(color: Colors.black),
-          titleMedium: TextStyle(color: Colors.black),
-          titleLarge: TextStyle(color: Colors.black),
-        ),
-        cardColor: Colors.white,
-        dialogBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF27445D),
-          elevation: 0,
-        ),
-      ),
-
-      // Always use light theme regardless of system setting
-      themeMode: ThemeMode.light,
-
-      // Use go_router instead of named routes
-      routerConfig: _router,
+        return MaterialApp.router(
+          title: 'Senior Surfers',
+          debugShowCheckedModeBanner: false,
+          theme: scaledTheme,
+          darkTheme: scaledTheme,
+          themeMode: ThemeMode.light,
+          routerConfig: _router,
+        );
+      },
     );
-  }
-
-  // This method should be called in your main.dart or initialization code
-  Future<void> initializeNotifications() async {
-    await AwesomeNotifications().initialize(
-      // set the icon to null if you want to use the default app icon
-      null,
-      [
-        NotificationChannel(
-          channelGroupKey: 'tutorial_group',
-          channelKey: 'tutorial_channel',
-          channelName: 'Tutorial Notifications',
-          channelDescription: 'Notifications about new tutorials and files',
-          defaultColor: const Color(0xFF3B6EA5),
-          ledColor: Colors.white,
-          importance: NotificationImportance.High,
-        ),
-      ],
-      // Channel groups are only visual and are not required
-      channelGroups: [
-        NotificationChannelGroup(
-          channelGroupKey: 'tutorial_group',
-          channelGroupName: 'Tutorial Group',
-        ),
-      ],
-      debug: true,
-    );
-
-    // Request permission
-    await AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
-      if (!isAllowed) {
-        AwesomeNotifications().requestPermissionToSendNotifications();
-      }
-    });
   }
 }

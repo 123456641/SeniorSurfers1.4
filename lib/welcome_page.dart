@@ -87,7 +87,10 @@ class _WelcomePageState extends State<WelcomePage> {
                     const Text(
                       'Helping you stay connected and confident with technology.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 20, color: Colors.black54),
+                      style: TextStyle(
+                        fontSize: 20,
+                        color: Color.fromARGB(136, 0, 0, 0),
+                      ),
                     ),
                     const SizedBox(height: 40),
 

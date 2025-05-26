@@ -60,7 +60,7 @@ class _AdminTechTermsPageState extends State<AdminTechTermsPage> {
         allTerms = terms;
         isLoading = false;
       });
-        } catch (e) {
+    } catch (e) {
       print('Error loading terms: $e');
       setState(() {
         errorMessage = 'Error loading terms: $e';

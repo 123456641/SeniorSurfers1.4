@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart'; // Import go_router
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../header_widget.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -98,7 +97,6 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
     final isSmallScreen = screenSize.width < 600;
 
     return Scaffold(
-      appBar: HeaderWidget(title: 'Admin Login', showBackButton: false),
       body: Stack(
         fit: StackFit.expand,
         children: [

@@ -3,6 +3,23 @@ import 'dart:async';
 import '../games_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// Single enum for difficulty levels
+enum QuizDifficulty { beginner, intermediate, advanced, adaptive }
+
+class Question {
+  final String question;
+  final List<String> options;
+  final int correctAnswerIndex;
+  final String explanation;
+
+  const Question({
+    required this.question,
+    required this.options,
+    required this.correctAnswerIndex,
+    required this.explanation,
+  });
+}
+
 class ZoomQuizGame extends StatelessWidget {
   const ZoomQuizGame({Key? key}) : super(key: key);
 
@@ -32,8 +49,9 @@ class ZoomQuizGame extends StatelessWidget {
       routes: {
         '/': (context) => const WelcomeScreen(),
         '/difficulty': (context) => const DifficultySelectionScreen(),
-        '/quiz': (context) => const QuizScreen(),
-        '/games': (context) => const GamesPage(),
+        '/quiz':
+            (context) => const QuizScreen(difficulty: QuizDifficulty.beginner),
+        '/games': (context) => GamesPage(),
       },
     );
   }
@@ -79,28 +97,79 @@ class WelcomeScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 24, color: Colors.white),
               ),
               const SizedBox(height: 60),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/difficulty');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 16,
+              // Difficulty selection section
+              Column(
+                children: [
+                  const Text(
+                    'Select Difficulty',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: 20),
+                  // Difficulty buttons row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildDifficultyButton(
+                        context,
+                        'Beginner',
+                        Colors.green,
+                        QuizDifficulty.beginner,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildDifficultyButton(
+                        context,
+                        'Intermediate',
+                        Colors.orange,
+                        QuizDifficulty.intermediate,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildDifficultyButton(
+                        context,
+                        'Advanced',
+                        Colors.red,
+                        QuizDifficulty.advanced,
+                      ),
+                    ],
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                  const SizedBox(height: 20),
+                  // Adaptive Mode button
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => QuizScreen(
+                                difficulty: QuizDifficulty.adaptive,
+                              ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 16,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: const Text('Adaptive Mode'),
                   ),
-                ),
-                child: const Text('Start Quiz'),
+                ],
               ),
               const SizedBox(height: 20),
+              // Go Back button
               TextButton(
                 onPressed: () {
                   Navigator.pushNamed(context, '/games');
@@ -118,6 +187,32 @@ class WelcomeScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDifficultyButton(
+    BuildContext context,
+    String text,
+    Color color,
+    QuizDifficulty difficulty,
+  ) {
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => QuizScreen(difficulty: difficulty),
+          ),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      child: Text(text),
     );
   }
 }
@@ -278,10 +373,10 @@ class DifficultyCard extends StatelessWidget {
   }
 }
 
-enum QuizDifficulty { beginner, intermediate, advanced, adaptive }
-
 class QuizScreen extends StatefulWidget {
-  const QuizScreen({Key? key}) : super(key: key);
+  final QuizDifficulty difficulty;
+
+  const QuizScreen({Key? key, required this.difficulty}) : super(key: key);
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -295,7 +390,7 @@ class _QuizScreenState extends State<QuizScreen> {
   Timer? _timer;
   int _secondsRemaining = 20;
   bool _timerActive = false;
-  QuizDifficulty difficulty = QuizDifficulty.beginner;
+  late QuizDifficulty currentDifficulty;
   List<Question> currentQuestions = [];
 
   // Adaptive quiz variables
@@ -303,23 +398,60 @@ class _QuizScreenState extends State<QuizScreen> {
   int consecutiveWrong = 0;
   QuizDifficulty adaptiveLevel = QuizDifficulty.beginner;
 
+  final List<Question> beginnerQuestions = [
+    Question(
+      question: 'How do you join a Zoom meeting?',
+      options: [
+        'Click the meeting link or enter meeting ID',
+        'Send an email to the host',
+        'Call the host on phone',
+        'Wait for automatic invitation',
+      ],
+      correctAnswerIndex: 0,
+      explanation:
+          'You can join a Zoom meeting by clicking the meeting link provided or entering the meeting ID.',
+    ),
+    // Add more beginner questions here
+  ];
+
+  final List<Question> intermediateQuestions = [
+    Question(
+      question: 'What is a Zoom breakout room?',
+      options: [
+        'A virtual waiting area',
+        'A separate session for small group discussion',
+        'A chat room',
+        'A break timer',
+      ],
+      correctAnswerIndex: 1,
+      explanation:
+          'Breakout rooms allow hosts to split meetings into smaller group sessions.',
+    ),
+    // Add more intermediate questions here
+  ];
+
+  final List<Question> advancedQuestions = [
+    Question(
+      question: 'Which setting allows you to reduce background noise in Zoom?',
+      options: [
+        'Echo cancellation',
+        'Background suppression',
+        'Noise suppression',
+        'Audio filtering',
+      ],
+      correctAnswerIndex: 2,
+      explanation:
+          'Noise suppression helps reduce background noise during Zoom meetings.',
+    ),
+    // Add more advanced questions here
+  ];
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as QuizDifficulty?;
-      if (args != null) {
-        setState(() {
-          difficulty = args;
-          if (difficulty == QuizDifficulty.adaptive) {
-            adaptiveLevel = QuizDifficulty.beginner;
-          }
-          _loadQuestions();
-        });
-        startTimer();
-      }
-    });
+    currentDifficulty = widget.difficulty;
+    _loadQuestions();
+    _startTimer();
   }
 
   @override
@@ -329,210 +461,139 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _loadQuestions() {
-    switch (difficulty == QuizDifficulty.adaptive
-        ? adaptiveLevel
-        : difficulty) {
-      case QuizDifficulty.beginner:
-        currentQuestions = beginnerQuestions;
-        break;
-      case QuizDifficulty.intermediate:
-        currentQuestions = intermediateQuestions;
-        break;
-      case QuizDifficulty.advanced:
-        currentQuestions = advancedQuestions;
-        break;
-      case QuizDifficulty.adaptive:
-        currentQuestions = beginnerQuestions;
-        break;
-    }
+    setState(() {
+      switch (currentDifficulty == QuizDifficulty.adaptive
+          ? adaptiveLevel
+          : currentDifficulty) {
+        case QuizDifficulty.beginner:
+          currentQuestions = beginnerQuestions;
+          break;
+        case QuizDifficulty.intermediate:
+          currentQuestions = intermediateQuestions;
+          break;
+        case QuizDifficulty.advanced:
+          currentQuestions = advancedQuestions;
+          break;
+        case QuizDifficulty.adaptive:
+          // This case is handled by the ternary operator above
+          break;
+      }
+      currentQuestions.shuffle();
+    });
   }
 
-  void startTimer() {
+  void _startTimer() {
+    _timer?.cancel();
     setState(() {
       _secondsRemaining = 20;
       _timerActive = true;
     });
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_secondsRemaining > 0) {
+      if (_secondsRemaining > 0) {
+        setState(() {
           _secondsRemaining--;
-        } else {
-          _timerActive = false;
-          if (!hasAnswered) {
-            checkAnswer(-1); // Time's up, count as wrong answer
-          }
-          timer.cancel();
-        }
-      });
+        });
+      } else {
+        _handleTimeout();
+      }
     });
   }
 
-  void checkAnswer(int selectedIndex) {
+  void _handleTimeout() {
     _timer?.cancel();
     setState(() {
+      _timerActive = false;
       hasAnswered = true;
-      selectedAnswerIndex = selectedIndex;
+      // Consider it a wrong answer if time runs out
+      if (selectedAnswerIndex == null) {
+        _updateAdaptiveDifficulty(false);
+      }
+    });
+  }
 
-      bool isCorrect =
-          selectedIndex ==
-          currentQuestions[currentQuestionIndex].correctAnswerIndex;
+  void _updateAdaptiveDifficulty(bool wasCorrect) {
+    if (currentDifficulty != QuizDifficulty.adaptive) return;
 
-      if (isCorrect) {
-        int timeBonus = _secondsRemaining ~/ 2; // Time bonus
-        score += 100 + timeBonus;
-
-        if (difficulty == QuizDifficulty.adaptive) {
-          consecutiveCorrect++;
-          consecutiveWrong = 0;
-          _adjustAdaptiveDifficulty();
+    setState(() {
+      if (wasCorrect) {
+        consecutiveCorrect++;
+        consecutiveWrong = 0;
+        if (consecutiveCorrect >= 3) {
+          if (adaptiveLevel == QuizDifficulty.beginner) {
+            adaptiveLevel = QuizDifficulty.intermediate;
+          } else if (adaptiveLevel == QuizDifficulty.intermediate) {
+            adaptiveLevel = QuizDifficulty.advanced;
+          }
+          consecutiveCorrect = 0;
+          _loadQuestions();
         }
       } else {
-        if (difficulty == QuizDifficulty.adaptive) {
-          consecutiveWrong++;
-          consecutiveCorrect = 0;
-          _adjustAdaptiveDifficulty();
+        consecutiveWrong++;
+        consecutiveCorrect = 0;
+        if (consecutiveWrong >= 2) {
+          if (adaptiveLevel == QuizDifficulty.advanced) {
+            adaptiveLevel = QuizDifficulty.intermediate;
+          } else if (adaptiveLevel == QuizDifficulty.intermediate) {
+            adaptiveLevel = QuizDifficulty.beginner;
+          }
+          consecutiveWrong = 0;
+          _loadQuestions();
         }
       }
+    });
+  }
+
+  void _handleAnswer(int answerIndex) {
+    if (hasAnswered) return;
+
+    _timer?.cancel();
+    setState(() {
+      selectedAnswerIndex = answerIndex;
+      hasAnswered = true;
       _timerActive = false;
-    });
 
-    // Wait for 2 seconds before moving to the next question
-    Future.delayed(const Duration(seconds: 2), () {
-      moveToNextQuestion();
+      if (answerIndex ==
+          currentQuestions[currentQuestionIndex].correctAnswerIndex) {
+        score++;
+        _updateAdaptiveDifficulty(true);
+      } else {
+        _updateAdaptiveDifficulty(false);
+      }
     });
   }
 
-  void _adjustAdaptiveDifficulty() {
-    QuizDifficulty newLevel = adaptiveLevel;
-
-    if (consecutiveCorrect >= 3 && adaptiveLevel != QuizDifficulty.advanced) {
-      // Increase difficulty
-      switch (adaptiveLevel) {
-        case QuizDifficulty.beginner:
-          newLevel = QuizDifficulty.intermediate;
-          break;
-        case QuizDifficulty.intermediate:
-          newLevel = QuizDifficulty.advanced;
-          break;
-        case QuizDifficulty.advanced:
-          break;
-        case QuizDifficulty.adaptive:
-          break;
-      }
-    } else if (consecutiveWrong >= 2 &&
-        adaptiveLevel != QuizDifficulty.beginner) {
-      // Decrease difficulty
-      switch (adaptiveLevel) {
-        case QuizDifficulty.advanced:
-          newLevel = QuizDifficulty.intermediate;
-          break;
-        case QuizDifficulty.intermediate:
-          newLevel = QuizDifficulty.beginner;
-          break;
-        case QuizDifficulty.beginner:
-          break;
-        case QuizDifficulty.adaptive:
-          break;
-      }
-    }
-
-    if (newLevel != adaptiveLevel) {
-      setState(() {
-        adaptiveLevel = newLevel;
-        _loadQuestions();
-        consecutiveCorrect = 0;
-        consecutiveWrong = 0;
-      });
-    }
-  }
-
-  void moveToNextQuestion() {
+  void _nextQuestion() {
     if (currentQuestionIndex < currentQuestions.length - 1) {
       setState(() {
         currentQuestionIndex++;
         hasAnswered = false;
         selectedAnswerIndex = null;
+        _startTimer();
       });
-      startTimer();
     } else {
-      // Quiz completed
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder:
-              (context) => ResultScreen(
-                score: score,
-                totalQuestions: currentQuestions.length,
-                difficulty: difficulty,
-              ),
-        ),
-      );
+      _showResults();
     }
   }
 
-  // Show confirmation dialog before exiting quiz
-  Future<bool> _onWillPop() async {
-    _timer?.cancel(); // Pause the timer while dialog is shown
-
-    bool exitQuiz =
-        await showDialog(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text('Exit Quiz?'),
-                content: const Text(
-                  'Are you sure you want to exit? Your progress will be lost.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(false); // Don't exit
-                    },
-                    child: const Text('CANCEL'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(true); // Exit quiz
-                    },
-                    child: const Text('EXIT'),
-                  ),
-                ],
+  void _showResults() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Quiz Complete!'),
+            content: Text('Your score: $score/${currentQuestions.length}'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                child: const Text('Return to Menu'),
               ),
-        ) ??
-        false;
-
-    if (!exitQuiz && _timerActive) {
-      // Resume timer if user cancels
-      startTimer();
-    }
-
-    return exitQuiz;
-  }
-
-  String _getDifficultyDisplayName() {
-    if (difficulty == QuizDifficulty.adaptive) {
-      switch (adaptiveLevel) {
-        case QuizDifficulty.beginner:
-          return 'Adaptive (Beginner)';
-        case QuizDifficulty.intermediate:
-          return 'Adaptive (Intermediate)';
-        case QuizDifficulty.advanced:
-          return 'Adaptive (Advanced)';
-        case QuizDifficulty.adaptive:
-          return 'Adaptive';
-      }
-    } else {
-      switch (difficulty) {
-        case QuizDifficulty.beginner:
-          return 'Beginner';
-        case QuizDifficulty.intermediate:
-          return 'Intermediate';
-        case QuizDifficulty.advanced:
-          return 'Advanced';
-        case QuizDifficulty.adaptive:
-          return 'Adaptive';
-      }
-    }
+            ],
+          ),
+    );
   }
 
   @override
@@ -541,265 +602,95 @@ class _QuizScreenState extends State<QuizScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final currentQuestion = currentQuestions[currentQuestionIndex];
+    final question = currentQuestions[currentQuestionIndex];
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Column(
-            children: [
-              Text(
-                'Question ${currentQuestionIndex + 1}/${currentQuestions.length}',
-              ),
-              Text(
-                _getDifficultyDisplayName(),
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-          centerTitle: true,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              _onWillPop().then((exit) {
-                if (exit) {
-                  Navigator.of(context).pop();
-                }
-              });
-            },
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Question ${currentQuestionIndex + 1}/${currentQuestions.length}',
         ),
-        body: Column(
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Progress and Timer
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Theme.of(context).colorScheme.primary,
-              child: Column(
-                children: [
-                  // Progress bar
-                  LinearProgressIndicator(
-                    value: (currentQuestionIndex + 1) / currentQuestions.length,
-                    backgroundColor: Colors.white.withOpacity(0.3),
-                    color: Colors.white,
-                  ),
-                  const SizedBox(height: 8),
-                  // Timer
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.timer,
-                        color:
-                            _secondsRemaining < 5 ? Colors.red : Colors.white,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$_secondsRemaining s',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              _secondsRemaining < 5 ? Colors.red : Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+            LinearProgressIndicator(
+              value: _timerActive ? _secondsRemaining / 20 : 0,
+              backgroundColor: Colors.grey[200],
+              valueColor: AlwaysStoppedAnimation<Color>(
+                _secondsRemaining > 5 ? Colors.green : Colors.red,
               ),
             ),
-            // Score
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: Colors.grey[200],
-              width: double.infinity,
-              child: Text(
-                'Score: $score',
-                textAlign: TextAlign.center,
+            const SizedBox(height: 20),
+            Text(
+              question.question,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: question.options.length,
+                itemBuilder: (context, index) {
+                  final isSelected = selectedAnswerIndex == index;
+                  final isCorrect = index == question.correctAnswerIndex;
+                  final showResult = hasAnswered;
+
+                  Color? backgroundColor;
+                  if (showResult) {
+                    if (isCorrect) {
+                      backgroundColor = Colors.green.withOpacity(0.3);
+                    } else if (isSelected) {
+                      backgroundColor = Colors.red.withOpacity(0.3);
+                    }
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: ElevatedButton(
+                      onPressed:
+                          hasAnswered ? null : () => _handleAnswer(index),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: backgroundColor,
+                        padding: const EdgeInsets.all(16),
+                      ),
+                      child: Text(
+                        question.options[index],
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (hasAnswered) ...[
+              const SizedBox(height: 20),
+              Text(
+                question.explanation,
                 style: const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _nextQuestion,
+                child: Text(
+                  currentQuestionIndex < currentQuestions.length - 1
+                      ? 'Next Question'
+                      : 'See Results',
                 ),
               ),
-            ),
-            // Question
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      currentQuestion.questionText,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Answer options
-                    ...List.generate(
-                      currentQuestion.answers.length,
-                      (index) => AnswerOption(
-                        answer: currentQuestion.answers[index],
-                        index: index,
-                        isSelected: selectedAnswerIndex == index,
-                        isCorrect: index == currentQuestion.correctAnswerIndex,
-                        hasAnswered: hasAnswered,
-                        onTap: () {
-                          if (!hasAnswered) {
-                            checkAnswer(index);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Go back to home button
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextButton.icon(
-                onPressed: () {
-                  _onWillPop().then((exit) {
-                    if (exit) {
-                      Navigator.of(
-                        context,
-                      ).pushNamedAndRemoveUntil('/', (route) => false);
-                    }
-                  });
-                },
-                icon: const Icon(Icons.home),
-                label: const Text('Go Back to Home'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
+            ],
           ],
         ),
       ),
     );
-  }
-}
-
-class AnswerOption extends StatelessWidget {
-  final String answer;
-  final int index;
-  final bool isSelected;
-  final bool isCorrect;
-  final bool hasAnswered;
-  final VoidCallback onTap;
-
-  const AnswerOption({
-    Key? key,
-    required this.answer,
-    required this.index,
-    required this.isSelected,
-    required this.isCorrect,
-    required this.hasAnswered,
-    required this.onTap,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    // Determine color based on selection and correctness
-    Color backgroundColor;
-    Color textColor = Colors.white;
-
-    if (!hasAnswered) {
-      // Not answered yet
-      backgroundColor = _getColorForIndex(index);
-      textColor = Colors.white;
-    } else {
-      // Already answered
-      if (isCorrect) {
-        backgroundColor = Colors.green;
-      } else if (isSelected) {
-        backgroundColor = Colors.red;
-      } else {
-        backgroundColor = _getColorForIndex(index).withOpacity(0.6);
-      }
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    ['A', 'B', 'C', 'D'][index],
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  answer,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: textColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (hasAnswered && isCorrect)
-                const Icon(Icons.check_circle, color: Colors.white),
-              if (hasAnswered && isSelected && !isCorrect)
-                const Icon(Icons.close, color: Colors.white),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Color _getColorForIndex(int index) {
-    switch (index) {
-      case 0:
-        return const Color(0xFF2D8CFF); // Zoom Blue
-      case 1:
-        return Colors.red;
-      case 2:
-        return Colors.green;
-      case 3:
-        return Colors.orange;
-      default:
-        return Colors.purple;
-    }
   }
 }
 
@@ -1137,332 +1028,3 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 }
-
-// Question model
-class Question {
-  final String questionText;
-  final List<String> answers;
-  final int correctAnswerIndex;
-
-  Question({
-    required this.questionText,
-    required this.answers,
-    required this.correctAnswerIndex,
-  });
-}
-
-// Beginner level questions
-final List<Question> beginnerQuestions = [
-  Question(
-    questionText: "What is the primary purpose of Zoom?",
-    answers: [
-      "Video conferencing and communication",
-      "File storage",
-      "Photo editing",
-      "Gaming",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How do you join a Zoom meeting?",
-    answers: [
-      "Click on the meeting link or enter Meeting ID",
-      "Send an email",
-      "Call the host",
-      "Download a file",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What does the mute button do in Zoom?",
-    answers: [
-      "Turns off your microphone",
-      "Turns off your camera",
-      "Ends the meeting",
-      "Changes your background",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "Where can you find the chat feature in Zoom?",
-    answers: [
-      "In the bottom toolbar during a meeting",
-      "In the top menu",
-      "Only available to hosts",
-      "In the settings menu",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is a Zoom Meeting ID?",
-    answers: [
-      "A unique number to identify a meeting",
-      "Your user password",
-      "The meeting duration",
-      "The number of participants",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How do you turn on your camera in Zoom?",
-    answers: [
-      "Click the video button in the toolbar",
-      "Press the spacebar",
-      "Type in chat",
-      "Click your name",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What does 'Share Screen' allow you to do?",
-    answers: [
-      "Show your computer screen to other participants",
-      "Take a screenshot",
-      "Save the meeting",
-      "Record the meeting",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How can you change your display name in a Zoom meeting?",
-    answers: [
-      "Right-click on your video and select 'Rename'",
-      "Type in the chat",
-      "Ask the host to change it",
-      "It cannot be changed during a meeting",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "What is the maximum number of participants in a basic Zoom account?",
-    answers: [
-      "100 participants",
-      "50 participants",
-      "200 participants",
-      "Unlimited",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "How long can a basic Zoom meeting last with multiple participants?",
-    answers: ["40 minutes", "60 minutes", "2 hours", "Unlimited time"],
-    correctAnswerIndex: 0,
-  ),
-];
-
-// Intermediate level questions
-final List<Question> intermediateQuestions = [
-  Question(
-    questionText: "What is a Zoom Waiting Room?",
-    answers: [
-      "A feature that allows hosts to control when participants join",
-      "A virtual background option",
-      "A chat room before the meeting",
-      "A recording storage area",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How can you create breakout rooms in Zoom?",
-    answers: [
-      "Host must enable and assign participants to separate rooms",
-      "Participants can create them automatically",
-      "Only available in mobile apps",
-      "Through the chat feature",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "What is the difference between 'Mute All' and 'Mute Upon Entry'?",
-    answers: [
-      "'Mute All' mutes current participants, 'Mute Upon Entry' mutes future joiners",
-      "They are the same feature",
-      "'Mute All' is permanent, 'Mute Upon Entry' is temporary",
-      "Only hosts can use 'Mute All'",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What keyboard shortcut mutes/unmutes you in Zoom?",
-    answers: [
-      "Alt+A (Windows) or Cmd+Shift+A (Mac)",
-      "Ctrl+M",
-      "Spacebar",
-      "Alt+M",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How can you enable virtual backgrounds in Zoom?",
-    answers: [
-      "Go to Settings > Virtual Background",
-      "Click on your video during a meeting",
-      "Use the chat commands",
-      "Only available for premium accounts",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is Zoom's 'Spotlight Video' feature?",
-    answers: [
-      "Makes one person's video the main focus for all participants",
-      "Adds special lighting effects",
-      "Records only that person's video",
-      "Increases video quality",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How can participants raise their hand in Zoom?",
-    answers: [
-      "Click the 'Raise Hand' button in the Reactions menu",
-      "Type 'raise hand' in chat",
-      "Wave at the camera",
-      "Press the spacebar twice",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is the purpose of Zoom's 'Polling' feature?",
-    answers: [
-      "To conduct surveys and get real-time feedback from participants",
-      "To schedule future meetings",
-      "To share files with participants",
-      "To control participant permissions",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "How can you share only a specific application window instead of your entire screen?",
-    answers: [
-      "Select 'Application Window' when clicking Share Screen",
-      "Minimize other applications first",
-      "Use Alt+Tab before sharing",
-      "This feature is not available",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is Zoom's 'Co-host' feature?",
-    answers: [
-      "Allows another participant to have host-like privileges",
-      "Enables dual camera setup",
-      "Shares hosting costs",
-      "Creates a backup recording",
-    ],
-    correctAnswerIndex: 0,
-  ),
-];
-
-// Advanced level questions
-final List<Question> advancedQuestions = [
-  Question(
-    questionText: "What is Zoom's API and what can it be used for?",
-    answers: [
-      "Application Programming Interface for integrating Zoom into other applications",
-      "A mobile app version",
-      "An advanced camera feature",
-      "A security protocol",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How does Zoom's end-to-end encryption work?",
-    answers: [
-      "Encrypts communication between participants, only they can decrypt it",
-      "Stores all data on secure servers",
-      "Uses password protection only",
-      "Available only for premium accounts",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "What is Zoom Phone and how does it integrate with Zoom Meetings?",
-    answers: [
-      "A cloud-based phone system that integrates with video conferencing",
-      "A mobile app for phone calls only",
-      "A hardware device for better audio",
-      "A contact management system",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "What are Zoom Webinars and how do they differ from regular meetings?",
-    answers: [
-      "Large-scale events with view-only attendees and interactive hosts/panelists",
-      "Meetings recorded automatically",
-      "Meetings with premium video quality",
-      "Private meetings with encryption",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "How does Zoom's Load Balancing work in large deployments?",
-    answers: [
-      "Distributes traffic across multiple data centers for optimal performance",
-      "Balances audio and video quality",
-      "Manages participant entry timing",
-      "Controls bandwidth usage per user",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is Zoom's SDK and what platforms does it support?",
-    answers: [
-      "Software Development Kit for iOS, Android, Windows, macOS, and Web",
-      "A security diagnostic kit",
-      "A screen sharing development tool",
-      "A mobile-only development platform",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "How can administrators manage Zoom settings organization-wide?",
-    answers: [
-      "Through the Zoom Admin Portal with centralized policy management",
-      "Individual user settings only",
-      "Through email notifications",
-      "Via mobile device management only",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText: "What is Zoom's HIPAA compliance feature and who can use it?",
-    answers: [
-      "Healthcare-specific security controls for covered entities",
-      "Available to all users automatically",
-      "Only for government organizations",
-      "A premium audio feature",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "How does Zoom's Cloud Recording differ from Local Recording in terms of processing and storage?",
-    answers: [
-      "Cloud recording processes in Zoom's servers with unlimited storage options",
-      "Cloud recording has lower quality than local",
-      "Local recording uploads automatically to cloud",
-      "They are identical in functionality",
-    ],
-    correctAnswerIndex: 0,
-  ),
-  Question(
-    questionText:
-        "What advanced authentication methods does Zoom support for enterprise security?",
-    answers: [
-      "SAML, OAuth, LDAP integration, and two-factor authentication",
-      "Password protection only",
-      "Biometric authentication exclusively",
-      "Social media login integration",
-    ],
-    correctAnswerIndex: 0,
-  ),
-];

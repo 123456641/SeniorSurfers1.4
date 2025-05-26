@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../header_widget.dart';
 import 'package:intl/intl.dart'; // Use this for date formatting instead of timeago
+import 'package:provider/provider.dart';
+import '../providers/font_size_provider.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({Key? key}) : super(key: key);
@@ -43,145 +44,159 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: HeaderWidget(),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          setState(() {}); // Refresh the UI
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Recent Notifications:',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Consumer<FontSizeProvider>(
+              builder:
+                  (context, fontSizeProvider, _) => Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: fontSizeProvider.fontSize * 2,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF27445D),
+                    ),
+                  ),
             ),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: fetchNotifications(),
-                builder: (context, snapshot) {
-                  if (isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+          ),
+          Expanded(child: _buildNotificationList()),
+        ],
+      ),
+    );
+  }
 
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 48,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Error loading notifications: ${snapshot.error}',
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () => setState(() {}),
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+  Widget _buildNotificationList() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() {}); // Refresh the UI
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: fetchNotifications(),
+              builder: (context, snapshot) {
+                if (isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                  final notifications = snapshot.data ?? [];
-
-                  if (notifications.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.notifications_off,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No notifications yet',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'You\'ll be notified when new tutorials are available',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    itemCount: notifications.length,
-                    padding: const EdgeInsets.only(bottom: 24),
-                    itemBuilder: (context, index) {
-                      final notification = notifications[index];
-                      final createdAt = DateTime.parse(
-                        notification['created_at'],
-                      );
-                      final formattedDate = DateFormat(
-                        'MMM d, yyyy - h:mm a',
-                      ).format(createdAt.toLocal());
-
-                      return Card(
-                        elevation: 2,
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Colors.red,
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading notifications: ${snapshot.error}',
+                          textAlign: TextAlign.center,
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(
-                              0xFF3B6EA5,
-                            ).withOpacity(0.2),
-                            child: Icon(
-                              Icons.file_present,
-                              color: const Color(0xFF3B6EA5),
-                            ),
-                          ),
-                          title: Text(
-                            notification['title'] ?? '',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 8),
-                              Text(notification['message'] ?? ''),
-                              const SizedBox(height: 8),
-                              Text(
-                                formattedDate,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}),
+                          child: const Text('Retry'),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   );
-                },
-              ),
+                }
+
+                final notifications = snapshot.data ?? [];
+
+                if (notifications.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.notifications_off,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No notifications yet',
+                          style: TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'You\'ll be notified when new tutorials are available',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: notifications.length,
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemBuilder: (context, index) {
+                    final notification = notifications[index];
+                    final createdAt = DateTime.parse(
+                      notification['created_at'],
+                    );
+                    final formattedDate = DateFormat(
+                      'MMM d, yyyy - h:mm a',
+                    ).format(createdAt.toLocal());
+
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(
+                            0xFF3B6EA5,
+                          ).withOpacity(0.2),
+                          child: Icon(
+                            Icons.file_present,
+                            color: const Color(0xFF3B6EA5),
+                          ),
+                        ),
+                        title: Text(
+                          notification['title'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(notification['message'] ?? ''),
+                            const SizedBox(height: 8),
+                            Text(
+                              formattedDate,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

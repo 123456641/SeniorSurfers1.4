@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../header_widget.dart';
 import 'dart:async';
-import 'package:realtime_client/src/realtime_channel.dart'; // Added import for RealtimeChannel
+import 'package:realtime_client/src/realtime_channel.dart';
+import '../dashboardsidebar.dart';
 
 // Get a reference to Supabase client
 final supabase = Supabase.instance.client;
@@ -19,6 +19,9 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
   List<Map<String, dynamic>> _forumTopics = [];
   bool _isLoading = true;
   String _errorMessage = '';
+  String? _expandedTopicId;
+  Map<String, List<Map<String, dynamic>>> _topicReplies = {};
+  Map<String, bool> _loadingReplies = {};
 
   @override
   void initState() {
@@ -58,183 +61,813 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
     }
   }
 
+  Future<void> _loadRepliesForTopic(String topicId) async {
+    if (_loadingReplies[topicId] == true) return;
+
+    setState(() {
+      _loadingReplies[topicId] = true;
+    });
+
+    try {
+      final repliesResponse = await supabase
+          .from('forum_replies')
+          .select('''
+            *,
+            users:user_id (
+              id, 
+              first_name, 
+              last_name, 
+              profile_picture_url
+            )
+          ''')
+          .eq('topic_id', topicId)
+          .order('created_at', ascending: true);
+
+      setState(() {
+        _topicReplies[topicId] = repliesResponse;
+        _loadingReplies[topicId] = false;
+      });
+    } catch (error) {
+      setState(() {
+        _loadingReplies[topicId] = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading replies: $error'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _submitReply(String topicId, String content) async {
+    try {
+      final userId = supabase.auth.currentUser?.id;
+
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You must be logged in to reply'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      await supabase.from('forum_replies').insert({
+        'topic_id': topicId,
+        'user_id': userId,
+        'content': content.trim(),
+      });
+
+      // Reload replies for this topic
+      await _loadRepliesForTopic(topicId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reply posted successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error posting reply: $error'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Get screen width to determine layout
+    return SidebarLayoutWrapper(
+      currentPage: '/community',
+      pageTitle: 'Community Forum',
+      child: _buildContent(),
+    );
+  }
+
+  Widget _buildContent() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isWideScreen = screenWidth > 600; // Threshold for wide screens
+    final isWideScreen = screenWidth > 600;
 
-    return Scaffold(
-      appBar: const HeaderWidget(),
-      body: RefreshIndicator(
-        onRefresh: _loadForumTopics,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Center(
-              child: Container(
-                // Limit width on larger screens for better readability
-                constraints: BoxConstraints(
-                  maxWidth: isWideScreen ? 900 : double.infinity,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title and Create Topic button in a responsive row
+    return RefreshIndicator(
+      onRefresh: _loadForumTopics,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: isWideScreen ? 900 : double.infinity,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Create Topic button - Made larger and more prominent
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isWideScreen ? 24.0 : 20.0,
+                              vertical: isWideScreen ? 16.0 : 14.0,
+                            ),
+                            textStyle: TextStyle(
+                              fontSize: isWideScreen ? 18.0 : 16.0,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            elevation: 3,
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CreateTopicPage(),
+                              ),
+                            ).then((_) => _loadForumTopics());
+                          },
+                          icon: const Icon(Icons.add, size: 24),
+                          label: Text(
+                            isWideScreen ? 'Start New Discussion' : 'New Topic',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Show error message if any
+                  if (_errorMessage.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Title that adapts to available space
-                          Expanded(
-                            child: Text(
-                              'Community Forum',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 40 : 28,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Roboto',
-                                color: const Color(0xFF27445D),
-                              ),
-                              textAlign: TextAlign.left,
-                            ),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          border: Border.all(color: Colors.red.shade300),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Text(
+                          _errorMessage,
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontSize: 16.0,
+                            fontWeight: FontWeight.w500,
                           ),
-
-                          // Create Topic Button
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isWideScreen ? 16.0 : 12.0,
-                                  vertical: isWideScreen ? 12.0 : 8.0,
-                                ),
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => const CreateTopicPage(),
-                                  ),
-                                ).then((_) => _loadForumTopics());
-                              },
-                              icon: const Icon(Icons.add),
-                              label: Text(
-                                isWideScreen ? 'Start New Topic' : 'New Topic',
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
 
-                    // Show error message if any
-                    if (_errorMessage.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(
-                          _errorMessage,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-
-                    // Display forum topics
-                    Expanded(
-                      child:
-                          _isLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : _forumTopics.isEmpty
-                              ? const Center(
-                                child: Text(
-                                  'No topics yet. Be the first to post!',
-                                ),
-                              )
-                              : ListView.builder(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8.0,
-                                ),
-                                itemCount: _forumTopics.length,
-                                itemBuilder: (context, index) {
-                                  final topic = _forumTopics[index];
-                                  final user =
-                                      topic['users'] as Map<String, dynamic>;
-                                  final fullName =
-                                      '${user['first_name']} ${user['last_name']}';
-                                  final createdAt = DateTime.parse(
-                                    topic['created_at'],
-                                  );
-                                  final timeAgo = timeago.format(createdAt);
-
-                                  return Card(
-                                    margin: EdgeInsets.symmetric(
-                                      horizontal: isWideScreen ? 16.0 : 8.0,
-                                      vertical: 4.0,
+                  // Display forum topics
+                  Expanded(
+                    child:
+                        _isLoading
+                            ? const Center(
+                              child: CircularProgressIndicator(strokeWidth: 3),
+                            )
+                            : _forumTopics.isEmpty
+                            ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.forum_outlined,
+                                      size: 64,
+                                      color: Colors.grey.shade400,
                                     ),
-                                    elevation: 2,
-                                    child: ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 16.0,
-                                            vertical: 8.0,
-                                          ),
-                                      leading: CircleAvatar(
-                                        backgroundImage:
-                                            user['profile_picture_url'] != null
-                                                ? NetworkImage(
-                                                  user['profile_picture_url'],
-                                                )
-                                                : null,
-                                        child:
-                                            user['profile_picture_url'] == null
-                                                ? Text(fullName[0])
-                                                : null,
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No discussions yet',
+                                      style: TextStyle(
+                                        fontSize: 20.0,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade600,
                                       ),
-                                      title: Text(
-                                        topic['title'],
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      subtitle: Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 4.0,
-                                        ),
-                                        child: Text(
-                                          'Posted by $fullName • $timeAgo',
-                                        ),
-                                      ),
-                                      trailing: const Icon(
-                                        Icons.arrow_forward_ios,
-                                      ),
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder:
-                                                (context) => TopicDetailPage(
-                                                  topicId: topic['id'],
-                                                  topicTitle: topic['title'],
-                                                ),
-                                          ),
-                                        ).then((_) => _loadForumTopics());
-                                      },
                                     ),
-                                  );
-                                },
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Be the first to start a conversation!',
+                                      style: TextStyle(
+                                        fontSize: 16.0,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
                               ),
+                            )
+                            : ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8.0,
+                                horizontal: 8.0,
+                              ),
+                              itemCount: _forumTopics.length,
+                              itemBuilder: (context, index) {
+                                final topic = _forumTopics[index];
+                                final user =
+                                    topic['users'] as Map<String, dynamic>;
+                                final fullName =
+                                    '${user['first_name']} ${user['last_name']}';
+                                final createdAt = DateTime.parse(
+                                  topic['created_at'],
+                                );
+                                final timeAgo = timeago.format(createdAt);
+                                final topicId = topic['id'];
+                                final isExpanded = _expandedTopicId == topicId;
+
+                                return Card(
+                                  margin: EdgeInsets.symmetric(
+                                    horizontal: isWideScreen ? 8.0 : 4.0,
+                                    vertical: 6.0,
+                                  ),
+                                  elevation: 3,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      // Main topic content
+                                      InkWell(
+                                        onTap: () async {
+                                          if (isExpanded) {
+                                            setState(() {
+                                              _expandedTopicId = null;
+                                            });
+                                          } else {
+                                            setState(() {
+                                              _expandedTopicId = topicId;
+                                            });
+                                            await _loadRepliesForTopic(topicId);
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(
+                                          12.0,
+                                        ),
+                                        child: Padding(
+                                          padding: EdgeInsets.all(
+                                            isWideScreen ? 20.0 : 16.0,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // User info and expand button
+                                              Row(
+                                                children: [
+                                                  CircleAvatar(
+                                                    radius:
+                                                        isWideScreen ? 24 : 20,
+                                                    backgroundImage:
+                                                        user['profile_picture_url'] !=
+                                                                null
+                                                            ? NetworkImage(
+                                                              user['profile_picture_url'],
+                                                            )
+                                                            : null,
+                                                    backgroundColor:
+                                                        Colors.blue.shade100,
+                                                    child:
+                                                        user['profile_picture_url'] ==
+                                                                null
+                                                            ? Text(
+                                                              fullName[0],
+                                                              style: TextStyle(
+                                                                fontSize:
+                                                                    isWideScreen
+                                                                        ? 18
+                                                                        : 16,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                color:
+                                                                    Colors
+                                                                        .blue
+                                                                        .shade700,
+                                                              ),
+                                                            )
+                                                            : null,
+                                                  ),
+                                                  const SizedBox(width: 12.0),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          fullName,
+                                                          style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            fontSize:
+                                                                isWideScreen
+                                                                    ? 16.0
+                                                                    : 15.0,
+                                                            color:
+                                                                Colors
+                                                                    .grey
+                                                                    .shade700,
+                                                          ),
+                                                        ),
+                                                        Text(
+                                                          timeAgo,
+                                                          style: TextStyle(
+                                                            color:
+                                                                Colors
+                                                                    .grey
+                                                                    .shade500,
+                                                            fontSize:
+                                                                isWideScreen
+                                                                    ? 14.0
+                                                                    : 13.0,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Icon(
+                                                    isExpanded
+                                                        ? Icons.expand_less
+                                                        : Icons.expand_more,
+                                                    size: 28,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 16.0),
+
+                                              // Topic title
+                                              Text(
+                                                topic['title'],
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize:
+                                                      isWideScreen
+                                                          ? 20.0
+                                                          : 18.0,
+                                                  color: const Color(
+                                                    0xFF1565C0,
+                                                  ),
+                                                  height: 1.3,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12.0),
+
+                                              // Topic content preview
+                                              Text(
+                                                topic['content'],
+                                                style: TextStyle(
+                                                  fontSize:
+                                                      isWideScreen
+                                                          ? 16.0
+                                                          : 15.0,
+                                                  height: 1.5,
+                                                  color: Colors.grey.shade700,
+                                                ),
+                                                maxLines: isExpanded ? null : 3,
+                                                overflow:
+                                                    isExpanded
+                                                        ? null
+                                                        : TextOverflow.ellipsis,
+                                              ),
+
+                                              const SizedBox(height: 12.0),
+
+                                              // Replies count
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.comment_outlined,
+                                                    size: 18,
+                                                    color: Colors.blue.shade600,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    '${_topicReplies[topicId]?.length ?? 0} replies',
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.blue.shade600,
+                                                      fontSize: 14.0,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                  const Spacer(),
+                                                  Text(
+                                                    isExpanded
+                                                        ? 'Tap to collapse'
+                                                        : 'Tap to view replies',
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                      fontSize: 13.0,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      // Expanded replies section
+                                      if (isExpanded)
+                                        _buildRepliesSection(
+                                          topicId,
+                                          isWideScreen,
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRepliesSection(String topicId, bool isWideScreen) {
+    final replies = _topicReplies[topicId] ?? [];
+    final isLoading = _loadingReplies[topicId] == true;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(12.0),
+          bottomRight: Radius.circular(12.0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 1),
+
+          // Replies header
+          Padding(
+            padding: EdgeInsets.all(isWideScreen ? 20.0 : 16.0),
+            child: Row(
+              children: [
+                Icon(Icons.forum, color: Colors.blue.shade600, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Discussion',
+                  style: TextStyle(
+                    fontSize: isWideScreen ? 18.0 : 16.0,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Replies list
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (replies.isEmpty)
+            Padding(
+              padding: EdgeInsets.all(isWideScreen ? 32.0 : 24.0),
+              child: Center(
+                child: Text(
+                  'No replies yet. Be the first to join the conversation!',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: isWideScreen ? 16.0 : 15.0,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                horizontal: isWideScreen ? 20.0 : 16.0,
+                vertical: 8.0,
+              ),
+              itemCount: replies.length,
+              separatorBuilder:
+                  (context, index) => const SizedBox(height: 12.0),
+              itemBuilder: (context, index) {
+                return _buildReplyCard(replies[index], isWideScreen);
+              },
+            ),
+
+          // Reply input
+          _buildReplyInput(topicId, isWideScreen),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyCard(Map<String, dynamic> reply, bool isWideScreen) {
+    final user = reply['users'] as Map<String, dynamic>? ?? {};
+    final firstName = user['first_name'] ?? 'Unknown';
+    final lastName = user['last_name'] ?? 'User';
+    final fullName = '$firstName $lastName';
+
+    final createdAt = DateTime.parse(reply['created_at']);
+    final timeAgo = timeago.format(createdAt);
+    final currentUser = supabase.auth.currentUser;
+    final isCurrentUserReply =
+        currentUser != null && currentUser.id == user['id'];
+
+    return Container(
+      padding: EdgeInsets.all(isWideScreen ? 16.0 : 14.0),
+      decoration: BoxDecoration(
+        color: isCurrentUserReply ? Colors.blue.shade50 : Colors.white,
+        borderRadius: BorderRadius.circular(8.0),
+        border: Border.all(
+          color:
+              isCurrentUserReply ? Colors.blue.shade200 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: isWideScreen ? 18 : 16,
+                backgroundImage:
+                    user['profile_picture_url'] != null
+                        ? NetworkImage(user['profile_picture_url'])
+                        : null,
+                backgroundColor: Colors.green.shade100,
+                child:
+                    user['profile_picture_url'] == null
+                        ? Text(
+                          fullName[0],
+                          style: TextStyle(
+                            fontSize: isWideScreen ? 14 : 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        )
+                        : null,
+              ),
+              const SizedBox(width: 10.0),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fullName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: isWideScreen ? 15.0 : 14.0,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      timeAgo,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: isWideScreen ? 13.0 : 12.0,
+                      ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
-        ),
+              if (isCurrentUserReply)
+                PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'delete') {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder:
+                            (context) => AlertDialog(
+                              title: const Text('Delete Reply'),
+                              content: const Text(
+                                'Are you sure you want to delete this reply?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed:
+                                      () => Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                      );
+
+                      if (confirmed == true) {
+                        try {
+                          await supabase
+                              .from('forum_replies')
+                              .delete()
+                              .eq('id', reply['id']);
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Reply deleted'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+
+                          // Reload replies
+                          String? topicId;
+                          for (var entry in _topicReplies.entries) {
+                            if (entry.value.any(
+                              (r) => r['id'] == reply['id'],
+                            )) {
+                              topicId = entry.key;
+                              break;
+                            }
+                          }
+                          if (topicId != null) {
+                            await _loadRepliesForTopic(topicId);
+                          }
+                        } catch (error) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error deleting reply: $error'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  itemBuilder:
+                      (context) => [
+                        const PopupMenuItem<String>(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, color: Colors.red, size: 20),
+                              SizedBox(width: 8.0),
+                              Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                ),
+            ],
+          ),
+          SizedBox(height: isWideScreen ? 12.0 : 10.0),
+          Text(
+            reply['content'],
+            style: TextStyle(
+              fontSize: isWideScreen ? 16.0 : 15.0,
+              height: 1.5,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
       ),
-      // Removed the floating action button as requested
+    );
+  }
+
+  Widget _buildReplyInput(String topicId, bool isWideScreen) {
+    final TextEditingController replyController = TextEditingController();
+    bool isSubmitting = false;
+
+    return StatefulBuilder(
+      builder: (context, setLocalState) {
+        return Container(
+          padding: EdgeInsets.all(isWideScreen ? 20.0 : 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Join the conversation',
+                style: TextStyle(
+                  fontSize: isWideScreen ? 16.0 : 15.0,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              TextField(
+                controller: replyController,
+                decoration: InputDecoration(
+                  hintText: 'Write your reply here...',
+                  hintStyle: TextStyle(
+                    fontSize: isWideScreen ? 16.0 : 15.0,
+                    color: Colors.grey.shade500,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                    borderSide: BorderSide(
+                      color: Colors.blue.shade400,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: isWideScreen ? 16.0 : 14.0,
+                    vertical: isWideScreen ? 16.0 : 14.0,
+                  ),
+                ),
+                style: TextStyle(fontSize: isWideScreen ? 16.0 : 15.0),
+                maxLines: 4,
+                minLines: 2,
+              ),
+              const SizedBox(height: 12.0),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed:
+                        isSubmitting
+                            ? null
+                            : () async {
+                              if (replyController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please enter a reply'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setLocalState(() {
+                                isSubmitting = true;
+                              });
+
+                              await _submitReply(topicId, replyController.text);
+
+                              replyController.clear();
+                              setLocalState(() {
+                                isSubmitting = false;
+                              });
+                            },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isWideScreen ? 20.0 : 16.0,
+                        vertical: isWideScreen ? 12.0 : 10.0,
+                      ),
+                      textStyle: TextStyle(
+                        fontSize: isWideScreen ? 16.0 : 15.0,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    icon:
+                        isSubmitting
+                            ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                            : const Icon(Icons.send, size: 18),
+                    label: Text(isSubmitting ? 'Posting...' : 'Post Reply'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -262,7 +895,6 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
     });
 
     try {
-      // Get current user ID
       final userId = supabase.auth.currentUser?.id;
 
       if (userId == null) {
@@ -275,30 +907,29 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
         return;
       }
 
-      // Insert the new topic
       await supabase.from('forum_topics').insert({
         'title': _titleController.text.trim(),
         'content': _contentController.text.trim(),
         'user_id': userId,
       });
 
-      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Topic created successfully'),
+            content: Text('Discussion created successfully'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
         Navigator.pop(context);
       }
     } catch (error) {
-      // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating topic: $error'),
+            content: Text('Error creating discussion: $error'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -320,619 +951,235 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Get screen size for responsive layout
     final screenWidth = MediaQuery.of(context).size.width;
     final isWideScreen = screenWidth > 600;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create New Topic')),
-      body: Center(
+    return SidebarLayoutWrapper(
+      currentPage: '/community',
+      pageTitle: 'Start New Discussion',
+      child: Center(
         child: SingleChildScrollView(
           child: Container(
             constraints: BoxConstraints(
               maxWidth: isWideScreen ? 800 : screenWidth * 0.95,
-              minHeight: 200,
+              minHeight: 300,
             ),
-            padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextFormField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Topic Title',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a title';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _contentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Content',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                    maxLines: 10,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter content';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24.0),
-                  ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitTopic,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    ),
-                    child:
-                        _isSubmitting
-                            ? const CircularProgressIndicator()
-                            : const Text('Create Topic'),
-                  ),
-                ],
+            padding: EdgeInsets.all(isWideScreen ? 24.0 : 20.0),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.0),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class TopicDetailPage extends StatefulWidget {
-  final String topicId;
-  final String topicTitle;
-
-  const TopicDetailPage({
-    Key? key,
-    required this.topicId,
-    required this.topicTitle,
-  }) : super(key: key);
-
-  @override
-  State<TopicDetailPage> createState() => _TopicDetailPageState();
-}
-
-class _TopicDetailPageState extends State<TopicDetailPage> {
-  Map<String, dynamic>? _topicDetails;
-  List<Map<String, dynamic>> _replies = [];
-  bool _isLoading = true;
-  String _errorMessage = '';
-  final _replyController = TextEditingController();
-  bool _isSubmittingReply = false;
-  // Change the type from StreamSubscription to RealtimeChannel
-  RealtimeChannel? _repliesSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTopicAndReplies();
-    // Set up real-time listener for replies
-    _setupRealtimeSubscription();
-  }
-
-  // Set up real-time subscription to handle deleted replies
-  void _setupRealtimeSubscription() {
-    _repliesSubscription =
-        supabase
-            .channel('public:forum_replies')
-            .onPostgresChanges(
-              event: PostgresChangeEvent.delete,
-              schema: 'public',
-              table: 'forum_replies',
-              filter: PostgresChangeFilter(
-                type: PostgresChangeFilterType.eq,
-                column: 'topic_id',
-                value: widget.topicId,
-              ),
-              callback: (payload) {
-                // When a reply is deleted, just refresh the data
-                _loadTopicAndReplies();
-              },
-            )
-            .subscribe();
-  }
-
-  Future<void> _loadTopicAndReplies() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = '';
-      });
-
-      // First check if the topic still exists
-      final topicExists =
-          await supabase
-              .from('forum_topics')
-              .select('id')
-              .eq('id', widget.topicId)
-              .maybeSingle();
-
-      // If topic no longer exists, show appropriate message and return
-      if (topicExists == null) {
-        setState(() {
-          _errorMessage = 'This topic has been deleted.';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Fetch topic details with user information
-      final topicResponse =
-          await supabase
-              .from('forum_topics')
-              .select('''
-            *,
-            users:user_id (
-              id, 
-              first_name, 
-              last_name, 
-              profile_picture_url
-            )
-          ''')
-              .eq('id', widget.topicId)
-              .single();
-
-      // Fetch replies with user information
-      final repliesResponse = await supabase
-          .from('forum_replies')
-          .select('''
-            *,
-            users:user_id (
-              id, 
-              first_name, 
-              last_name, 
-              profile_picture_url
-            )
-          ''')
-          .eq('topic_id', widget.topicId)
-          .order('created_at', ascending: true);
-
-      // Only update state if the widget is still mounted
-      if (mounted) {
-        setState(() {
-          _topicDetails = topicResponse;
-          _replies = repliesResponse;
-          _isLoading = false;
-        });
-      }
-    } catch (error) {
-      // Handle errors gracefully
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Error loading topic details: $error';
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _submitReply() async {
-    if (_replyController.text.trim().isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _isSubmittingReply = true;
-    });
-
-    try {
-      // Get current user ID
-      final userId = supabase.auth.currentUser?.id;
-
-      if (userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You must be logged in to reply'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      // Insert the new reply
-      await supabase.from('forum_replies').insert({
-        'topic_id': widget.topicId,
-        'user_id': userId,
-        'content': _replyController.text.trim(),
-      });
-
-      // Clear the input field
-      _replyController.clear();
-
-      // Reload replies
-      await _loadTopicAndReplies();
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reply posted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (error) {
-      // Show error message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error posting reply: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmittingReply = false;
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _replyController.dispose();
-    // Cancel subscription when widget is disposed
-    _repliesSubscription?.unsubscribe();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Get screen size for responsive layout
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWideScreen = screenWidth > 600;
-
-    return Scaffold(
-      appBar: AppBar(),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _errorMessage.isNotEmpty
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _errorMessage,
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Go Back'),
-                    ),
-                  ],
-                ),
-              )
-              : Center(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: isWideScreen ? 900 : double.infinity,
-                  ),
+              child: Padding(
+                padding: EdgeInsets.all(isWideScreen ? 32.0 : 24.0),
+                child: Form(
+                  key: _formKey,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Topic details
-                      if (_topicDetails != null) _buildTopicCard(isWideScreen),
+                      // Header
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.create,
+                            color: Colors.blue.shade600,
+                            size: isWideScreen ? 28 : 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Create New Discussion',
+                            style: TextStyle(
+                              fontSize: isWideScreen ? 24.0 : 20.0,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: isWideScreen ? 32.0 : 24.0),
 
-                      // Replies header
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            Text(
-                              'Replies',
-                              style: TextStyle(
-                                fontSize: isWideScreen ? 20.0 : 18.0,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 8.0),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                                vertical: 4.0,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(16.0),
-                              ),
-                              child: Text(
-                                '${_replies.length}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+                      // Title field
+                      Text(
+                        'Discussion Title',
+                        style: TextStyle(
+                          fontSize: isWideScreen ? 18.0 : 16.0,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
                         ),
                       ),
-
-                      // Replies list
-                      Expanded(
-                        child:
-                            _replies.isEmpty
-                                ? const Center(
-                                  child: Text(
-                                    'No replies yet. Be the first to reply!',
-                                  ),
-                                )
-                                : ListView.builder(
-                                  padding: const EdgeInsets.only(bottom: 80),
-                                  itemCount: _replies.length,
-                                  itemBuilder: (context, index) {
-                                    // Check if reply still exists before building card
-                                    final reply = _replies[index];
-                                    if (reply == null) return const SizedBox();
-                                    return _buildReplyCard(reply, isWideScreen);
-                                  },
-                                ),
-                      ),
-
-                      // Reply input
-                      Container(
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).scaffoldBackgroundColor,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, -2),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _titleController,
+                        style: TextStyle(fontSize: isWideScreen ? 18.0 : 16.0),
+                        decoration: InputDecoration(
+                          hintText: 'Enter a clear, descriptive title...',
+                          hintStyle: TextStyle(
+                            fontSize: isWideScreen ? 16.0 : 15.0,
+                            color: Colors.grey.shade500,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(
+                              color: Colors.blue.shade400,
+                              width: 2,
                             ),
-                          ],
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isWideScreen ? 16.0 : 14.0,
+                            vertical: isWideScreen ? 16.0 : 14.0,
+                          ),
+                          errorStyle: TextStyle(
+                            fontSize: isWideScreen ? 14.0 : 13.0,
+                            color: Colors.red.shade600,
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _replyController,
-                                decoration: const InputDecoration(
-                                  hintText: 'Write a reply...',
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                maxLines: 3,
-                                minLines: 1,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter a title for your discussion';
+                          }
+                          if (value.trim().length < 5) {
+                            return 'Title should be at least 5 characters long';
+                          }
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: isWideScreen ? 24.0 : 20.0),
+
+                      // Content field
+                      Text(
+                        'Your Message',
+                        style: TextStyle(
+                          fontSize: isWideScreen ? 18.0 : 16.0,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _contentController,
+                        style: TextStyle(
+                          fontSize: isWideScreen ? 16.0 : 15.0,
+                          height: 1.5,
+                        ),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Share your thoughts, ask a question, or start a conversation...',
+                          hintStyle: TextStyle(
+                            fontSize: isWideScreen ? 15.0 : 14.0,
+                            color: Colors.grey.shade500,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(
+                              color: Colors.blue.shade400,
+                              width: 2,
+                            ),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isWideScreen ? 16.0 : 14.0,
+                            vertical: isWideScreen ? 16.0 : 14.0,
+                          ),
+                          alignLabelWithHint: true,
+                          errorStyle: TextStyle(
+                            fontSize: isWideScreen ? 14.0 : 13.0,
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                        maxLines: isWideScreen ? 12 : 10,
+                        minLines: isWideScreen ? 6 : 5,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter your message';
+                          }
+                          if (value.trim().length < 10) {
+                            return 'Message should be at least 10 characters long';
+                          }
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: isWideScreen ? 32.0 : 24.0),
+
+                      // Action buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Cancel button
+                          TextButton(
+                            onPressed:
+                                _isSubmitting
+                                    ? null
+                                    : () {
+                                      Navigator.pop(context);
+                                    },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isWideScreen ? 24.0 : 20.0,
+                                vertical: isWideScreen ? 16.0 : 14.0,
+                              ),
+                              textStyle: TextStyle(
+                                fontSize: isWideScreen ? 16.0 : 15.0,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(width: 8.0),
-                            IconButton(
-                              onPressed:
-                                  _isSubmittingReply ? null : _submitReply,
-                              icon:
-                                  _isSubmittingReply
-                                      ? const CircularProgressIndicator()
-                                      : const Icon(Icons.send),
-                              color: Colors.blue,
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.grey.shade600),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 16.0),
+
+                          // Create button
+                          ElevatedButton.icon(
+                            onPressed: _isSubmitting ? null : _submitTopic,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isWideScreen ? 24.0 : 20.0,
+                                vertical: isWideScreen ? 16.0 : 14.0,
+                              ),
+                              textStyle: TextStyle(
+                                fontSize: isWideScreen ? 16.0 : 15.0,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              elevation: 3,
+                            ),
+                            icon:
+                                _isSubmitting
+                                    ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                    : const Icon(Icons.create, size: 20),
+                            label: Text(
+                              _isSubmitting
+                                  ? 'Creating...'
+                                  : 'Create Discussion',
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
-    );
-  }
-
-  Widget _buildTopicCard(bool isWideScreen) {
-    final user = _topicDetails!['users'] as Map<String, dynamic>;
-    final fullName = '${user['first_name']} ${user['last_name']}';
-    final createdAt = DateTime.parse(_topicDetails!['created_at']);
-    final timeAgo = timeago.format(createdAt);
-
-    return Card(
-      margin: EdgeInsets.all(isWideScreen ? 16.0 : 8.0),
-      elevation: 3,
-      child: Padding(
-        padding: EdgeInsets.all(isWideScreen ? 24.0 : 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: isWideScreen ? 24 : 20,
-                  backgroundImage:
-                      user['profile_picture_url'] != null
-                          ? NetworkImage(user['profile_picture_url'])
-                          : null,
-                  child:
-                      user['profile_picture_url'] == null
-                          ? Text(fullName[0])
-                          : null,
-                ),
-                const SizedBox(width: 12.0),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fullName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isWideScreen ? 16.0 : 14.0,
-                      ),
-                    ),
-                    Text(
-                      timeAgo,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: isWideScreen ? 14.0 : 12.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
-            SizedBox(height: isWideScreen ? 24.0 : 16.0),
-            Text(
-              _topicDetails!['title'],
-              style: TextStyle(
-                fontSize: isWideScreen ? 24.0 : 20.0,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF27445D),
-              ),
-            ),
-            SizedBox(height: isWideScreen ? 16.0 : 12.0),
-            Text(
-              _topicDetails!['content'],
-              style: TextStyle(
-                fontSize: isWideScreen ? 16.0 : 14.0,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReplyCard(Map<String, dynamic> reply, bool isWideScreen) {
-    // Add null safety checks for user info
-    final user = reply['users'] as Map<String, dynamic>? ?? {};
-    final firstName = user['first_name'] ?? 'Unknown';
-    final lastName = user['last_name'] ?? 'User';
-    final fullName = '$firstName $lastName';
-
-    final createdAt = DateTime.parse(reply['created_at']);
-    final timeAgo = timeago.format(createdAt);
-    final currentUser = supabase.auth.currentUser;
-    final isCurrentUserReply =
-        currentUser != null && currentUser.id == user['id'];
-
-    return Card(
-      margin: EdgeInsets.symmetric(
-        horizontal: isWideScreen ? 16.0 : 8.0,
-        vertical: 4.0,
-      ),
-      color: isCurrentUserReply ? Colors.blue.shade50 : null,
-      elevation: 2,
-      child: Padding(
-        padding: EdgeInsets.all(isWideScreen ? 16.0 : 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: isWideScreen ? 20 : 18,
-                  backgroundImage:
-                      user['profile_picture_url'] != null
-                          ? NetworkImage(user['profile_picture_url'])
-                          : null,
-                  child:
-                      user['profile_picture_url'] == null
-                          ? Text(fullName[0])
-                          : null,
-                ),
-                const SizedBox(width: 8.0),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fullName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      timeAgo,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12.0,
-                      ),
-                    ),
-                  ],
-                ),
-                if (isCurrentUserReply) ...[
-                  const Spacer(),
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        // Handle edit reply
-                        // Implement edit functionality
-                      } else if (value == 'delete') {
-                        // Handle delete reply
-                        try {
-                          await supabase
-                              .from('forum_replies')
-                              .delete()
-                              .eq('id', reply['id']);
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Reply deleted'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-
-                          _loadTopicAndReplies();
-                        } catch (error) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $error'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    itemBuilder:
-                        (context) => [
-                          const PopupMenuItem<String>(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit),
-                                SizedBox(width: 8.0),
-                                Text('Edit'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, color: Colors.red),
-                                SizedBox(width: 8.0),
-                                Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                  ),
-                ],
-              ],
-            ),
-            SizedBox(height: isWideScreen ? 12.0 : 8.0),
-            Text(
-              reply['content'],
-              style: TextStyle(
-                fontSize: isWideScreen ? 16.0 : 14.0,
-                height: 1.4,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

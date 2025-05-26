@@ -1,7 +1,9 @@
 // TODO Implement this library.
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../header_widget.dart';
+import 'package:provider/provider.dart';
+import 'providers/font_size_provider.dart';
+import 'dashboardsidebar.dart';
 
 class TechGlossaryPage extends StatefulWidget {
   const TechGlossaryPage({super.key});
@@ -63,6 +65,14 @@ class _TechGlossaryPageState extends State<TechGlossaryPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SidebarLayoutWrapper(
+      currentPage: '/techglossary',
+      pageTitle: 'Tech Glossary',
+      child: _buildGlossaryList(),
+    );
+  }
+
+  Widget _buildGlossaryList() {
     // Group glossary items by first letter for more efficient rendering
     Map<String, List<Map<String, String>>> groupedGlossary = {};
 
@@ -77,60 +87,16 @@ class _TechGlossaryPageState extends State<TechGlossaryPage> {
     // Get sorted letters for the alphabet sidebar
     final List<String> availableLetters = groupedGlossary.keys.toList()..sort();
 
-    return Scaffold(
-      appBar: const HeaderWidget(),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: Row(
-                children: [
-                  _buildAlphabetSidebar(availableLetters),
-                  Expanded(
-                    child:
-                        _activeLetterFilter != null
-                            ? _buildFilteredList(groupedGlossary)
-                            : _buildFullGlossaryList(
-                              groupedGlossary,
-                              availableLetters,
-                            ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    return Row(
+      children: [
+        _buildAlphabetSidebar(availableLetters),
+        Expanded(
+          child:
+              _activeLetterFilter != null
+                  ? _buildFilteredList(groupedGlossary)
+                  : _buildFullGlossaryList(groupedGlossary, availableLetters),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            "Tech Glossary",
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF27445D),
-            ),
-          ),
-          if (_activeLetterFilter != null)
-            TextButton.icon(
-              icon: const Icon(Icons.close),
-              label: Text('Clear "$_activeLetterFilter" filter'),
-              onPressed: () {
-                setState(() {
-                  _activeLetterFilter = null;
-                });
-              },
-            ),
-        ],
-      ),
+      ],
     );
   }
 

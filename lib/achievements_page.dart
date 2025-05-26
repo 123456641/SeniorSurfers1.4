@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'header_widget.dart';
+import 'package:provider/provider.dart';
+import 'providers/font_size_provider.dart';
+import 'dashboardsidebar.dart';
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
@@ -234,43 +236,35 @@ class _AchievementsPageState extends State<AchievementsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Scaffold(
-        appBar: const HeaderWidget(),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Loading achievements...'),
-            ],
-          ),
-        ),
-      );
-    }
+    return SidebarLayoutWrapper(
+      currentPage: '/achievements',
+      pageTitle: 'Achievements',
+      child:
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildAchievementsList(),
+    );
+  }
 
+  Widget _buildAchievementsList() {
     if (errorMessage != null) {
-      return Scaffold(
-        appBar: const HeaderWidget(),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.grey[600]),
-              const SizedBox(height: 16),
-              Text(
-                errorMessage!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadAchievements,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadAchievements,
+              child: const Text('Retry'),
+            ),
+          ],
         ),
       );
     }
@@ -280,92 +274,89 @@ class _AchievementsPageState extends State<AchievementsPage> {
     int totalCount = achievements.length;
     double completionPercentage = (unlockedCount / totalCount) * 100;
 
-    return Scaffold(
-      appBar: const HeaderWidget(),
-      body: RefreshIndicator(
-        onRefresh: _loadAchievements,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with stats
-            Container(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Achievements',
-                    style: TextStyle(
-                      fontSize: 45,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Roboto',
-                      color: Color(0xFF27445D),
-                    ),
+    return RefreshIndicator(
+      onRefresh: _loadAchievements,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with stats
+          Container(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Achievements',
+                  style: TextStyle(
+                    fontSize: 45,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Roboto',
+                    color: Color(0xFF27445D),
                   ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.emoji_events,
-                          color: Colors.blue[700],
-                          size: 32,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$unlockedCount of $totalCount Achievements',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue[700],
-                                ),
-                              ),
-                              Text(
-                                '${completionPercentage.toStringAsFixed(1)}% Complete',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.blue[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        CircularProgressIndicator(
-                          value: completionPercentage / 100,
-                          backgroundColor: Colors.blue[200],
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.blue[700]!,
-                          ),
-                        ),
-                      ],
-                    ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue[200]!),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.emoji_events,
+                        color: Colors.blue[700],
+                        size: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$unlockedCount of $totalCount Achievements',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[700],
+                              ),
+                            ),
+                            Text(
+                              '${completionPercentage.toStringAsFixed(1)}% Complete',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      CircularProgressIndicator(
+                        value: completionPercentage / 100,
+                        backgroundColor: Colors.blue[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue[700]!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+          ),
 
-            // Achievement list
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                itemCount: achievements.length,
-                itemBuilder: (context, index) {
-                  return AchievementBadge(achievement: achievements[index]);
-                },
-              ),
+          // Achievement list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              itemCount: achievements.length,
+              itemBuilder: (context, index) {
+                return AchievementBadge(achievement: achievements[index]);
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

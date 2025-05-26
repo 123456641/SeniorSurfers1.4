@@ -14,7 +14,8 @@ class _DashboardPageState extends State<DashboardPage>
   bool _isSidebarExpanded = true;
   late AnimationController _animationController;
   late Animation<double> _sidebarAnimation;
-  String _selectedSection = 'Dashboard';
+  String _selectedSection = 'Tutorials'; // Changed default to Tutorials
+  int _selectedBottomIndex = 0; // Tutorials is first in bottom nav
 
   final List<NavigationItem> _navigationItems = [
     NavigationItem(
@@ -55,6 +56,20 @@ class _DashboardPageState extends State<DashboardPage>
     ),
   ];
 
+  // Items for bottom navigation (mobile) - removed Dashboard
+  List<NavigationItem> get _bottomNavItems => [
+    _navigationItems[0], // Tutorials
+    _navigationItems[1], // Practice
+    _navigationItems[3], // Games
+    _navigationItems[4], // Community
+    NavigationItem(
+      title: 'More',
+      icon: Icons.more_horiz,
+      imagePath: '',
+      route: '/more',
+    ),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +81,11 @@ class _DashboardPageState extends State<DashboardPage>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
+
+    // Auto-navigate to tutorials on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.go('/tutorials');
+    });
   }
 
   @override
@@ -73,6 +93,15 @@ class _DashboardPageState extends State<DashboardPage>
     _animationController.dispose();
     super.dispose();
   }
+
+  // Responsive breakpoints
+  bool _isDesktop(BuildContext context) =>
+      MediaQuery.of(context).size.width >= 1200;
+  bool _isTablet(BuildContext context) =>
+      MediaQuery.of(context).size.width >= 768 &&
+      MediaQuery.of(context).size.width < 1200;
+  bool _isMobile(BuildContext context) =>
+      MediaQuery.of(context).size.width < 768;
 
   void _toggleSidebar() {
     setState(() {
@@ -85,214 +114,482 @@ class _DashboardPageState extends State<DashboardPage>
     });
   }
 
-  void _selectSection(String section) {
+  void _selectSection(String section, {int? bottomIndex}) {
     setState(() {
       _selectedSection = section;
+      if (bottomIndex != null) {
+        _selectedBottomIndex = bottomIndex;
+      }
     });
+  }
+
+  void _onBottomNavTap(int index) {
+    if (index < _bottomNavItems.length) {
+      final item = _bottomNavItems[index];
+      if (item.title == 'More') {
+        _showMoreOptionsBottomSheet();
+      } else {
+        _selectSection(item.title, bottomIndex: index);
+        if (item.route.isNotEmpty) {
+          context.go(item.route); // Changed to go() instead of push()
+        }
+      }
+    }
+  }
+
+  void _showMoreOptionsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    height: 4,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Title
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Text(
+                      'More Options',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF27445D),
+                      ),
+                    ),
+                  ),
+                  // Show remaining navigation items (Tech Glossary, Achievements)
+                  ListTile(
+                    leading: Icon(
+                      _navigationItems[2].icon,
+                      color: const Color(0xFF27445D),
+                    ),
+                    title: Text(
+                      _navigationItems[2].title, // Tech Glossary
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _selectSection(_navigationItems[2].title);
+                      context.go(_navigationItems[2].route);
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      _navigationItems[5].icon,
+                      color: const Color(0xFF27445D),
+                    ),
+                    title: Text(
+                      _navigationItems[5].title, // Achievements
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _selectSection(_navigationItems[5].title);
+                      context.go(_navigationItems[5].route);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.settings,
+                      color: Color(0xFF27445D),
+                    ),
+                    title: const Text(
+                      'Settings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _selectSection('Settings');
+                      context.go('/settingsD');
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isWebMode = MediaQuery.of(context).size.width > 800;
+    final isDesktop = _isDesktop(context);
+    final isTablet = _isTablet(context);
+    final isMobile = _isMobile(context);
 
     return Scaffold(
-      appBar: const HeaderWidget(title: 'Senior Surfers'),
-      body: Row(
-        children: [
-          // Sidebar
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            width:
-                _isSidebarExpanded
-                    ? (isWebMode ? 280 : 250)
-                    : (isWebMode ? 80 : 70),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF27445D),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    spreadRadius: 0,
-                    blurRadius: 10,
-                    offset: const Offset(2, 0),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Sidebar Header
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            _isSidebarExpanded ? Icons.menu_open : Icons.menu,
-                            color: Colors.white,
-                            size: isWebMode ? 28 : 24,
-                          ),
-                          onPressed: _toggleSidebar,
-                        ),
-                        if (_isSidebarExpanded) ...[
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Navigation',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: isWebMode ? 20 : 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const Divider(color: Colors.white24),
-                  // Navigation Items
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _navigationItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _navigationItems[index];
-                        return SidebarNavigationTile(
-                          item: item,
-                          isExpanded: _isSidebarExpanded,
-                          isSelected: _selectedSection == item.title,
-                          isWebMode: isWebMode,
-                          onTap: () {
-                            _selectSection(item.title);
-                            context.push(item.route);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  // Settings at bottom
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    child: SidebarNavigationTile(
-                      item: NavigationItem(
-                        title: 'Settings',
-                        icon: Icons.settings,
-                        imagePath: '',
-                        route: '/settingsD',
-                      ),
-                      isExpanded: _isSidebarExpanded,
-                      isSelected: _selectedSection == 'Settings',
-                      isWebMode: isWebMode,
-                      onTap: () {
-                        _selectSection('Settings');
-                        context.push('/settingsD');
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Main Content Area
-          Expanded(
-            child: Container(
-              color: Colors.grey[50],
-              child: _buildMainContent(isWebMode),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      // Mobile app bar
+      appBar: isMobile ? _buildMobileAppBar() : null,
 
-  Widget _buildMainContent(bool isWebMode) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Page Title
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _selectedSection,
-                style: TextStyle(
-                  fontSize: isWebMode ? 48 : 36,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF27445D),
-                ),
-              ),
-              if (_selectedSection == 'Dashboard')
-                Text(
-                  'Welcome back!',
-                  style: TextStyle(
-                    fontSize: isWebMode ? 18 : 16,
-                    color: Colors.grey[600],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          // Content Area
-          Expanded(child: _buildContentForSection(_selectedSection, isWebMode)),
-        ],
-      ),
-    );
-  }
+      // Bottom navigation for mobile
+      bottomNavigationBar: isMobile ? _buildBottomNavigation() : null,
 
-  Widget _buildContentForSection(String section, bool isWebMode) {
-    if (section == 'Dashboard') {
-      return GridView.count(
-        crossAxisCount: isWebMode ? 3 : 2,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio: 1.2,
-        children:
-            _navigationItems.map((item) {
-              return ContentCard(
-                title: item.title,
-                imagePath: item.imagePath,
-                isWebMode: isWebMode,
-                onTap: () {
-                  _selectSection(item.title);
-                  context.push(item.route);
-                },
-              );
-            }).toList(),
-      );
-    } else {
-      // Placeholder content for other sections
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: SafeArea(
+        child: Row(
           children: [
-            Icon(
-              Icons.construction,
-              size: isWebMode ? 80 : 60,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '$section content will be displayed here',
-              style: TextStyle(
-                fontSize: isWebMode ? 24 : 20,
-                color: Colors.grey[600],
+            // Sidebar - Hide on mobile, show on tablet/desktop
+            if (!isMobile)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                width:
+                    _isSidebarExpanded
+                        ? (isDesktop ? 300 : 280)
+                        : (isDesktop ? 90 : 80),
+                child: _buildSidebar(context),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This is where the $section functionality will be implemented.',
-              style: TextStyle(
-                fontSize: isWebMode ? 16 : 14,
-                color: Colors.grey[500],
+
+            // Main Content Area
+            Expanded(
+              child: Container(
+                color: Colors.grey[50],
+                height: double.infinity,
+                child: _buildMainContent(context),
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildMobileAppBar() {
+    return AppBar(
+      title: const Text(
+        'Senior Surfers',
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+      ),
+      backgroundColor: const Color(0xFF27445D),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined),
+          onPressed: () {
+            // Handle notifications
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.account_circle_outlined),
+          onPressed: () {
+            // Handle profile
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomNavigation() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children:
+                _bottomNavItems.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final isSelected = _selectedBottomIndex == index;
+
+                  return GestureDetector(
+                    onTap: () => _onBottomNavTap(index),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            isSelected
+                                ? const Color(0xFF27445D).withOpacity(0.1)
+                                : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            item.icon,
+                            color:
+                                isSelected
+                                    ? const Color(0xFF27445D)
+                                    : Colors.grey[600],
+                            size: 24,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.title,
+                            style: TextStyle(
+                              color:
+                                  isSelected
+                                      ? const Color(0xFF27445D)
+                                      : Colors.grey[600],
+                              fontSize: 12,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebar(BuildContext context) {
+    final isDesktop = _isDesktop(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF27445D),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            spreadRadius: 0,
+            blurRadius: 10,
+            offset: const Offset(2, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Sidebar Header
+          Container(
+            padding: EdgeInsets.all(isDesktop ? 20 : 16),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _isSidebarExpanded ? Icons.menu_open : Icons.menu,
+                    color: Colors.white,
+                    size: isDesktop ? 28 : 24,
+                  ),
+                  onPressed: _toggleSidebar,
+                ),
+                if (_isSidebarExpanded) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Senior Surfers',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isDesktop ? 22 : 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white24),
+
+          // Navigation Items
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _navigationItems.length,
+              itemBuilder: (context, index) {
+                final item = _navigationItems[index];
+                return SidebarNavigationTile(
+                  item: item,
+                  isExpanded: _isSidebarExpanded,
+                  isSelected: _selectedSection == item.title,
+                  isDesktop: isDesktop,
+                  onTap: () {
+                    _selectSection(item.title);
+                    if (item.route.isNotEmpty) {
+                      context.go(
+                        item.route,
+                      ); // Changed to go() instead of push()
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+
+          // Settings at bottom
+          Container(
+            padding: const EdgeInsets.all(8),
+            child: SidebarNavigationTile(
+              item: NavigationItem(
+                title: 'Settings',
+                icon: Icons.settings,
+                imagePath: '',
+                route: '/settingsD',
+              ),
+              isExpanded: _isSidebarExpanded,
+              isSelected: _selectedSection == 'Settings',
+              isDesktop: isDesktop,
+              onTap: () {
+                _selectSection('Settings');
+                context.go('/settingsD');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainContent(BuildContext context) {
+    final isDesktop = _isDesktop(context);
+    final isTablet = _isTablet(context);
+    final isMobile = _isMobile(context);
+
+    return Column(
+      children: [
+        // Page Header (hidden on mobile if app bar exists)
+        if (!isMobile) ...[
+          Container(
+            padding: EdgeInsets.all(isDesktop ? 32 : 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedSection,
+                  style: TextStyle(
+                    fontSize: isDesktop ? 48 : 36,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF27445D),
+                  ),
+                ),
+                Text(
+                  'Learn technology step by step',
+                  style: TextStyle(
+                    fontSize: isDesktop ? 18 : 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Content Area - Show a welcome message instead of dashboard grid
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              isMobile ? 16 : (isDesktop ? 32 : 24),
+              isMobile ? 16 : 0,
+              isMobile ? 16 : (isDesktop ? 32 : 24),
+              isMobile ? 16 : (isDesktop ? 32 : 24),
+            ),
+            child: _buildWelcomeContent(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWelcomeContent(BuildContext context) {
+    final isDesktop = _isDesktop(context);
+    final isMobile = _isMobile(context);
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.school,
+            size: isMobile ? 80 : (isDesktop ? 120 : 100),
+            color: const Color(0xFF27445D),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Welcome to Senior Surfers!',
+            style: TextStyle(
+              fontSize: isMobile ? 24 : (isDesktop ? 36 : 30),
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF27445D),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Learn technology at your own pace with our step-by-step tutorials, practice exercises, and helpful community.',
+            style: TextStyle(
+              fontSize: isMobile ? 16 : (isDesktop ? 20 : 18),
+              color: Colors.grey[600],
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.go('/tutorials');
+            },
+            icon: const Icon(Icons.play_circle_outline, color: Colors.white),
+            label: Text(
+              'Start Learning',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF27445D),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 24 : 32,
+                vertical: isMobile ? 12 : 16,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -314,7 +611,7 @@ class SidebarNavigationTile extends StatefulWidget {
   final NavigationItem item;
   final bool isExpanded;
   final bool isSelected;
-  final bool isWebMode;
+  final bool isDesktop;
   final VoidCallback onTap;
 
   const SidebarNavigationTile({
@@ -322,7 +619,7 @@ class SidebarNavigationTile extends StatefulWidget {
     required this.item,
     required this.isExpanded,
     required this.isSelected,
-    required this.isWebMode,
+    required this.isDesktop,
     required this.onTap,
   });
 
@@ -336,165 +633,67 @@ class _SidebarNavigationTileState extends State<SidebarNavigationTile> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.isDesktop ? 12 : 8,
+        vertical: 4,
+      ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform:
-              _isHovered
-                  ? (Matrix4.identity()..scale(1.02))
-                  : Matrix4.identity(),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color:
-                      widget.isSelected
-                          ? Colors.white.withOpacity(0.15)
-                          : _isHovered
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.transparent,
-                  border:
-                      widget.isSelected
-                          ? Border.all(color: Colors.white.withOpacity(0.3))
-                          : null,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      widget.item.icon,
-                      color: Colors.white,
-                      size: widget.isWebMode ? 24 : 22,
-                    ),
-                    if (widget.isExpanded) ...[
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          widget.item.title,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: widget.isWebMode ? 16 : 14,
-                            fontWeight:
-                                widget.isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                          ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal:
+                    widget.isExpanded ? (widget.isDesktop ? 20 : 16) : 12,
+                vertical: widget.isDesktop ? 16 : 12,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color:
+                    widget.isSelected
+                        ? Colors.white.withOpacity(0.15)
+                        : _isHovered
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.transparent,
+                border:
+                    widget.isSelected
+                        ? Border.all(color: Colors.white.withOpacity(0.3))
+                        : null,
+              ),
+              child: Row(
+                mainAxisAlignment:
+                    widget.isExpanded
+                        ? MainAxisAlignment.start
+                        : MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    widget.item.icon,
+                    color: Colors.white,
+                    size: widget.isDesktop ? 26 : 24,
+                  ),
+                  if (widget.isExpanded) ...[
+                    SizedBox(width: widget.isDesktop ? 20 : 16),
+                    Expanded(
+                      child: Text(
+                        widget.item.title,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: widget.isDesktop ? 18 : 16,
+                          fontWeight:
+                              widget.isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
                         ),
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ContentCard extends StatefulWidget {
-  final String title;
-  final String imagePath;
-  final bool isWebMode;
-  final VoidCallback onTap;
-
-  const ContentCard({
-    super.key,
-    required this.title,
-    required this.imagePath,
-    required this.isWebMode,
-    required this.onTap,
-  });
-
-  @override
-  State<ContentCard> createState() => _ContentCardState();
-}
-
-class _ContentCardState extends State<ContentCard> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform:
-              _isHovered
-                  ? (Matrix4.identity()..scale(1.05))
-                  : Matrix4.identity(),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color:
-                    _isHovered
-                        ? Colors.blue.withOpacity(0.3)
-                        : Colors.grey.withOpacity(0.1),
-                spreadRadius: _isHovered ? 2 : 0,
-                blurRadius: _isHovered ? 15 : 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border:
-                _isHovered
-                    ? Border.all(color: Colors.blue.withOpacity(0.5), width: 2)
-                    : Border.all(color: Colors.grey.withOpacity(0.1)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Image.asset(widget.imagePath, fit: BoxFit.contain),
-                ),
-              ),
-              Expanded(
-                flex: 1,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF27445D).withOpacity(0.05),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: widget.isWebMode ? 16 : 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF27445D),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),

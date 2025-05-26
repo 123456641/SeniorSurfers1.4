@@ -11,12 +11,16 @@ android {
     ndkVersion = "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        // Keep Java 8 for flutter_local_notifications compatibility
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+        
+        // Enable core library desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
     }
 
     defaultConfig {
@@ -27,6 +31,9 @@ android {
         targetSdkVersion(flutter.targetSdkVersion) // Use function invocation with flutter version
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // Enable multidex if needed
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -34,6 +41,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    // Add core library desugaring dependency
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    
+    // Add multidex support if your app has many dependencies
+    implementation("androidx.multidex:multidex:2.0.1")
 }
 
 flutter {

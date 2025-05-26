@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../header_widget.dart';
 import 'package:senior_surfers/practice_mode_apps/GoogleMeetPage/gmeetwcpage.dart';
 import 'package:flutter/cupertino.dart';
 import 'joinmeet.dart';
@@ -44,7 +43,6 @@ class GoogleMeetPage extends StatelessWidget {
             : 32.0;
 
     return Scaffold(
-      appBar: HeaderWidget(),
       body: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding),

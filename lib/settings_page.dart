@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
-import 'header_widget.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'providers/font_size_provider.dart';
+import 'dashboardsidebar.dart';
+import 'widgets/scaled_text.dart';
 
 class SettingsPage extends StatefulWidget {
   @override
@@ -21,10 +24,10 @@ class _SettingsPageState extends State<SettingsPage> {
   String _email = '';
   bool _isLoading = true;
   bool _isUploadingImage = false;
+  bool _isFontSizeChanged = false;
 
   final picker = ImagePicker();
   final SupabaseClient supabase = Supabase.instance.client;
-
   final _formKey = GlobalKey<FormState>();
   bool isEditable = false;
 
@@ -35,6 +38,13 @@ class _SettingsPageState extends State<SettingsPage> {
     _fetchUserData();
   }
 
+  void _onFontSizeChanged(double newSize) {
+    Provider.of<FontSizeProvider>(context, listen: false).setFontSize(newSize);
+    setState(() {
+      _isFontSizeChanged = true;
+    });
+  }
+
   Future<void> _requestPermissions() async {
     if (Platform.isAndroid || Platform.isIOS) {
       Map<Permission, PermissionStatus> statuses =
@@ -43,7 +53,6 @@ class _SettingsPageState extends State<SettingsPage> {
             Permission.storage,
             Permission.camera,
           ].request();
-
       print('Permission statuses: $statuses');
     }
   }
@@ -56,11 +65,9 @@ class _SettingsPageState extends State<SettingsPage> {
           _isLoading = false;
         });
       }
-      print('No authenticated user found');
       return;
     }
 
-    print('Fetching data for user: ${user.id}');
     try {
       final response =
           await supabase
@@ -71,19 +78,13 @@ class _SettingsPageState extends State<SettingsPage> {
               .eq('id', user.id)
               .single();
 
-      print('User data fetched: $response');
-
       if (mounted) {
-        // Force refresh profile picture URL by adding timestamp to prevent caching
         String? pictureUrl = response['profile_picture_url'];
         if (pictureUrl != null) {
-          if (pictureUrl.contains('?')) {
-            pictureUrl =
-                '$pictureUrl&_cache=${DateTime.now().millisecondsSinceEpoch}';
-          } else {
-            pictureUrl =
-                '$pictureUrl?_cache=${DateTime.now().millisecondsSinceEpoch}';
-          }
+          pictureUrl =
+              pictureUrl.contains('?')
+                  ? '$pictureUrl&_cache=${DateTime.now().millisecondsSinceEpoch}'
+                  : '$pictureUrl?_cache=${DateTime.now().millisecondsSinceEpoch}';
         }
 
         setState(() {
@@ -94,10 +95,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _email = response['email'] ?? '';
           _isLoading = false;
         });
-        print('Set profile picture URL to: $profilePictureUrl');
       }
     } catch (e) {
-      print('Error fetching user data: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -106,55 +105,39 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _pickAndUploadImage() async {
+  void _pickAndUploadImage() async {
     final user = supabase.auth.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You must be logged in to update your profile picture'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+    if (user == null) return;
 
-    // Show image source dialog
     await showModalBottomSheet(
       context: context,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
       ),
       builder: (BuildContext context) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'Select Image Source',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  ),
+              children: [
+                const ScaledText(
+                  'Choose Photo Source',
+                  baseFontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
+                const SizedBox(height: 16),
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.red.withOpacity(0.1),
-                    child: Icon(Icons.photo_library, color: Colors.red),
-                  ),
-                  title: Text('Gallery'),
+                  leading: const Icon(Icons.photo_library, size: 32),
+                  title: const ScaledText('Gallery', baseFontSize: 16),
                   onTap: () {
                     Navigator.pop(context);
                     _getAndUploadImage(ImageSource.gallery, user);
                   },
                 ),
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.red.withOpacity(0.1),
-                    child: Icon(Icons.photo_camera, color: Colors.red),
-                  ),
-                  title: Text('Camera'),
+                  leading: const Icon(Icons.camera_alt, size: 32),
+                  title: const ScaledText('Camera', baseFontSize: 16),
                   onTap: () {
                     Navigator.pop(context);
                     _getAndUploadImage(ImageSource.camera, user);
@@ -170,111 +153,70 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _getAndUploadImage(ImageSource source, User user) async {
     try {
-      print('Starting image pick and upload process');
       final XFile? pickedFile = await picker.pickImage(
         source: source,
-        imageQuality: 70, // Compress image
+        imageQuality: 70,
         maxWidth: 800,
       );
 
-      if (pickedFile == null) {
-        print('No image selected');
-        return;
-      }
+      if (pickedFile == null) return;
 
-      if (mounted) {
-        setState(() {
-          _isUploadingImage = true;
-        });
-      }
+      setState(() {
+        _isUploadingImage = true;
+      });
 
-      print('Image selected: ${pickedFile.path}');
-
-      // Read file as bytes to avoid file path issues
       final Uint8List bytes = await pickedFile.readAsBytes();
-
-      // Create a unique file name without complex paths
       final String fileName =
           'profile_${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      print('Uploading with file name: $fileName');
-
-      try {
-        // Upload bytes directly instead of File object
-        await supabase.storage
-            .from('profiles')
-            .uploadBinary(
-              fileName,
-              bytes,
-              fileOptions: const FileOptions(
-                cacheControl: '3600',
-                upsert: true,
-                contentType: 'image/jpeg',
-              ),
-            );
-
-        print('File uploaded successfully to storage');
-
-        // Get the public URL for the uploaded file with forced cache busting
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        String imageUrl = supabase.storage
-            .from('profiles')
-            .getPublicUrl(fileName);
-
-        print('Raw image URL: $imageUrl');
-
-        // Add cache-busting parameter to ensure we get the latest image
-        imageUrl =
-            imageUrl.contains('?')
-                ? '$imageUrl&t=$timestamp'
-                : '$imageUrl?t=$timestamp';
-
-        print('Image public URL with cache busting: $imageUrl');
-
-        // Update the user's profile in the database
-        await supabase
-            .from('users')
-            .update({'profile_picture_url': imageUrl})
-            .eq('id', user.id);
-
-        print('Database updated with new image URL');
-
-        if (mounted) {
-          setState(() {
-            profilePictureUrl = imageUrl;
-            _isUploadingImage = false;
-          });
-
-          // Force a refresh to ensure UI updates
-          await _fetchUserData();
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Profile picture updated successfully'),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.green,
+      await supabase.storage
+          .from('profiles')
+          .uploadBinary(
+            fileName,
+            bytes,
+            fileOptions: const FileOptions(
+              cacheControl: '3600',
+              upsert: true,
+              contentType: 'image/jpeg',
             ),
           );
-        }
-      } catch (uploadError) {
-        print('Storage operation error: $uploadError');
-        throw uploadError;
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      String imageUrl = supabase.storage
+          .from('profiles')
+          .getPublicUrl(fileName);
+      imageUrl =
+          imageUrl.contains('?')
+              ? '$imageUrl&t=$timestamp'
+              : '$imageUrl?t=$timestamp';
+
+      await supabase
+          .from('users')
+          .update({'profile_picture_url': imageUrl})
+          .eq('id', user.id);
+
+      if (mounted) {
+        setState(() {
+          profilePictureUrl = imageUrl;
+          _isUploadingImage = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
-      print('Error in image upload process: $e');
       if (mounted) {
         setState(() {
           _isUploadingImage = false;
         });
 
-        // Show a more specific error message if possible
-        String errorMessage =
-            'Failed to update profile picture: ${e.toString()}';
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
-            behavior: SnackBarBehavior.floating,
+            content: Text('Error updating profile picture: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -293,50 +235,26 @@ class _SettingsPageState extends State<SettingsPage> {
       _formKey.currentState!.save();
 
       final user = supabase.auth.currentUser;
-      if (user == null) {
-        print('Cannot update profile: No authenticated user');
-        return;
-      }
+      if (user == null) return;
 
       setState(() {
         _isLoading = true;
       });
 
       try {
-        print('Updating user profile with data:');
-        print('First Name: $_firstName');
-        print('Last Name: $_lastName');
-        print('Phone: $_phoneNumber');
-        print('User ID: ${user.id}');
-
-        // Create update data map
-        final updateData = {
-          'first_name': _firstName,
-          'last_name': _lastName,
-          'phone': _phoneNumber,
-        };
-
-        // Ensure we have data to update
-        if (_firstName.isEmpty && _lastName.isEmpty && _phoneNumber.isEmpty) {
-          throw Exception('No data to update');
-        }
-
-        // Perform the update
-        final response =
-            await supabase
-                .from('users')
-                .update(updateData)
-                .eq('id', user.id)
-                .select();
-
-        // Log the response for debugging
-        print('Update response: $response');
+        await supabase
+            .from('users')
+            .update({
+              'first_name': _firstName,
+              'last_name': _lastName,
+              'phone': _phoneNumber,
+            })
+            .eq('id', user.id);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text('Profile updated successfully!'),
-              behavior: SnackBarBehavior.floating,
               backgroundColor: Colors.green,
             ),
           );
@@ -346,15 +264,7 @@ class _SettingsPageState extends State<SettingsPage> {
           });
         }
       } catch (e) {
-        print('Error updating profile: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to update profile: ${e.toString()}'),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: Colors.red,
-            ),
-          );
           setState(() {
             _isLoading = false;
           });
@@ -364,52 +274,36 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showLogoutDialog() {
-    final isLargeScreen = MediaQuery.of(context).size.width > 900;
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(
+          title: const ScaledText(
             "Sign Out",
-            style: TextStyle(fontSize: isLargeScreen ? 22 : 18),
+            baseFontSize: 20,
+            fontWeight: FontWeight.bold,
           ),
-          content: Text(
+          content: const ScaledText(
             "Are you sure you want to sign out?",
-            style: TextStyle(fontSize: isLargeScreen ? 16 : 14),
+            baseFontSize: 16,
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          contentPadding: EdgeInsets.fromLTRB(24, 20, 24, 0),
-          actionsPadding: EdgeInsets.all(16),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                "Cancel",
-                style: TextStyle(fontSize: isLargeScreen ? 16 : 14),
-              ),
+              child: const ScaledText("Cancel", baseFontSize: 16),
             ),
             ElevatedButton(
               onPressed: () async {
                 await supabase.auth.signOut();
                 if (mounted) {
-                  // Navigate back to Welcome Page using GoRouter
                   context.go('/');
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isLargeScreen ? 20 : 16,
-                  vertical: isLargeScreen ? 12 : 8,
-                ),
-              ),
-              child: Text(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const ScaledText(
                 "Sign Out",
-                style: TextStyle(fontSize: isLargeScreen ? 16 : 14),
+                baseFontSize: 16,
+                color: Colors.white,
               ),
             ),
           ],
@@ -420,121 +314,92 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Determine if we're on a large screen (tablet/desktop)
-    final isLargeScreen = MediaQuery.of(context).size.width > 900;
-    final isMediumScreen =
-        MediaQuery.of(context).size.width > 600 &&
-        MediaQuery.of(context).size.width <= 900;
-
-    return Scaffold(
-      appBar: HeaderWidget(title: 'Settings'),
-      body:
-          _isLoading
-              ? Center(child: CircularProgressIndicator(color: Colors.red))
-              : RefreshIndicator(
-                color: Colors.red,
-                onRefresh: () async {
-                  // Re-fetch user data when pulled to refresh
-                  await _fetchUserData();
-                },
-                child: Center(
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.symmetric(
-                      vertical: 24.0,
-                      horizontal:
-                          isLargeScreen
-                              ? 80.0
-                              : isMediumScreen
-                              ? 40.0
-                              : 16.0,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: 1200),
-                      child:
-                          isLargeScreen
-                              ? _buildLargeScreenLayout()
-                              : _buildSmallScreenLayout(),
-                    ),
-                  ),
-                ),
-              ),
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        return SidebarLayoutWrapper(
+          currentPage: '/settingsD',
+          pageTitle: 'Settings',
+          child: _buildSettingsContent(fontProvider),
+        );
+      },
     );
   }
 
-  Widget _buildLargeScreenLayout() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+  Widget _buildSettingsContent(FontSizeProvider fontProvider) {
+    final isLargeScreen = MediaQuery.of(context).size.width > 900;
+
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+          onRefresh: _fetchUserData,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child:
+                  isLargeScreen
+                      ? _buildLargeScreenLayout(fontProvider)
+                      : _buildSmallScreenLayout(fontProvider),
+            ),
+          ),
+        );
+  }
+
+  Widget _buildLargeScreenLayout(FontSizeProvider fontProvider) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left side - Profile picture
-            Expanded(
-              flex: 1,
-              child: Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    children: [
-                      _buildProfilePicture(),
-                      SizedBox(height: 40),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: Colors.red,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: _showLogoutDialog,
-                          child: Text(
-                            'Sign Out',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        ),
+        Expanded(
+          flex: 1,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  _buildProfilePicture(),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showLogoutDialog,
+                      icon: const Icon(Icons.logout),
+                      label: const ScaledText('Sign Out', baseFontSize: 16),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-            SizedBox(width: 24),
-            // Right side - Account details
-            Expanded(flex: 2, child: _buildAccountDetails()),
-          ],
+          ),
         ),
+        const SizedBox(width: 24),
+        Expanded(flex: 2, child: _buildAccountDetails(fontProvider)),
       ],
     );
   }
 
-  Widget _buildSmallScreenLayout() {
+  Widget _buildSmallScreenLayout(FontSizeProvider fontProvider) {
     return Column(
       children: [
         _buildProfilePicture(),
-        SizedBox(height: 30),
-        _buildAccountDetails(),
-        SizedBox(height: 40),
+        const SizedBox(height: 24),
+        _buildAccountDetails(fontProvider),
+        const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: Colors.red,
-              padding: EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+          child: ElevatedButton.icon(
             onPressed: _showLogoutDialog,
-            child: Text('Sign Out', style: TextStyle(fontSize: 16)),
+            icon: const Icon(Icons.logout),
+            label: const ScaledText('Sign Out', baseFontSize: 16),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
           ),
         ),
       ],
@@ -542,350 +407,278 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildProfilePicture() {
-    final isLargeScreen = MediaQuery.of(context).size.width > 900;
-
     return Column(
       children: [
-        Center(
-          child: Stack(
-            children: [
-              GestureDetector(
-                onTap: _isUploadingImage ? null : _pickAndUploadImage,
-                child: Container(
-                  width: isLargeScreen ? 160 : 120,
-                  height: isLargeScreen ? 160 : 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.grey[200],
-                    border: Border.all(
-                      color: Colors.red.withOpacity(0.3),
-                      width: 3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child:
-                      _isUploadingImage
-                          ? Center(
-                            child: CircularProgressIndicator(color: Colors.red),
-                          )
-                          : ClipOval(
-                            child:
-                                profilePictureUrl != null &&
-                                        profilePictureUrl!.isNotEmpty
-                                    ? FadeInImage.assetNetwork(
-                                      placeholder:
-                                          'assets/images/placeholder_profile.png', // Add a placeholder image to your assets
-                                      image: profilePictureUrl!,
-                                      fit: BoxFit.cover,
-                                      width: isLargeScreen ? 160 : 120,
-                                      height: isLargeScreen ? 160 : 120,
-                                      imageErrorBuilder: (
-                                        context,
-                                        error,
-                                        stackTrace,
-                                      ) {
-                                        print(
-                                          'Error loading profile image: $error',
-                                        );
-                                        return Icon(
-                                          Icons.person,
-                                          size: isLargeScreen ? 80 : 60,
-                                          color: Colors.grey[800],
-                                        );
-                                      },
-                                    )
-                                    : Icon(
-                                      Icons.person,
-                                      size: isLargeScreen ? 80 : 60,
-                                      color: Colors.grey[800],
-                                    ),
-                          ),
+        Stack(
+          children: [
+            GestureDetector(
+              onTap: _isUploadingImage ? null : _pickAndUploadImage,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.grey[200],
+                  border: Border.all(color: const Color(0xFF27445D), width: 3),
+                ),
+                child:
+                    _isUploadingImage
+                        ? const Center(child: CircularProgressIndicator())
+                        : ClipOval(
+                          child:
+                              profilePictureUrl != null
+                                  ? Image.network(
+                                    profilePictureUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Icon(Icons.person, size: 70);
+                                    },
+                                  )
+                                  : const Icon(Icons.person, size: 70),
+                        ),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF27445D),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: EdgeInsets.all(isLargeScreen ? 12 : 8),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 5,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.camera_alt,
-                    color: Colors.white,
-                    size: isLargeScreen ? 28 : 22,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        SizedBox(height: 10),
-        Text(
-          'Tap to change profile picture',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontStyle: FontStyle.italic,
-            fontSize: isLargeScreen ? 16 : 14,
-          ),
+        const SizedBox(height: 12),
+        const ScaledText(
+          'Tap to change photo',
+          baseFontSize: 14,
+          color: Colors.grey,
         ),
       ],
     );
   }
 
-  Widget _buildAccountDetails() {
-    final isLargeScreen = MediaQuery.of(context).size.width > 900;
-
+  Widget _buildAccountDetails(FontSizeProvider fontProvider) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Padding(
-        padding: EdgeInsets.all(isLargeScreen ? 24.0 : 16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text(
+                const ScaledText(
                   'Account Details',
-                  style: TextStyle(
-                    fontSize: isLargeScreen ? 22 : 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  baseFontSize: 22,
+                  fontWeight: FontWeight.bold,
                 ),
-                Spacer(),
+                const Spacer(),
                 isEditable
-                    ? TextButton.icon(
+                    ? ElevatedButton.icon(
                       onPressed: _saveChanges,
-                      icon: Icon(
-                        Icons.save,
-                        color: Colors.red,
-                        size: isLargeScreen ? 24 : 20,
-                      ),
-                      label: Text(
-                        'Save',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: isLargeScreen ? 16 : 14,
-                        ),
+                      icon: const Icon(Icons.save),
+                      label: const ScaledText('Save', baseFontSize: 14),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
                       ),
                     )
-                    : IconButton(
-                      icon: Icon(
-                        Icons.edit,
-                        color: Colors.red,
-                        size: isLargeScreen ? 24 : 20,
-                      ),
+                    : ElevatedButton.icon(
                       onPressed: _toggleEditability,
-                      tooltip: 'Edit profile',
+                      icon: const Icon(Icons.edit),
+                      label: const ScaledText('Edit', baseFontSize: 14),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF27445D),
+                      ),
                     ),
               ],
             ),
-            Divider(),
-            SizedBox(height: isLargeScreen ? 16 : 10),
+            const Divider(height: 32),
             Form(
               key: _formKey,
-              child: isLargeScreen ? _buildWideForm() : _buildNarrowForm(),
+              child: Column(
+                children: [
+                  _buildTextField(
+                    label: 'First Name',
+                    value: _firstName,
+                    enabled: isEditable,
+                    onSaved: (value) => _firstName = value ?? '',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    label: 'Last Name',
+                    value: _lastName,
+                    enabled: isEditable,
+                    onSaved: (value) => _lastName = value ?? '',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    label: 'Phone',
+                    value: _phoneNumber,
+                    enabled: isEditable,
+                    onSaved: (value) => _phoneNumber = value ?? '',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    label: 'Email',
+                    value: _email,
+                    enabled: false,
+                    onSaved: (value) => _email = value ?? '',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Font Size Settings
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.text_fields, color: Color(0xFF27445D)),
+                      const SizedBox(width: 8),
+                      const ScaledText(
+                        'Text Size',
+                        baseFontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      const Spacer(),
+                      if (_isFontSizeChanged)
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _isFontSizeChanged = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Font size applied to entire app!',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const ScaledText('Applied!', baseFontSize: 12),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const ScaledText('A', baseFontSize: 12),
+                      Expanded(
+                        child: Slider(
+                          value: fontProvider.fontSize,
+                          min: fontProvider.minFontSize,
+                          max: fontProvider.maxFontSize,
+                          divisions: 20,
+                          activeColor: const Color(0xFF27445D),
+                          onChanged: _onFontSizeChanged,
+                        ),
+                      ),
+                      const ScaledText('A', baseFontSize: 18),
+                      const SizedBox(width: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF27445D),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ScaledText(
+                          '${fontProvider.fontSize.round()}px',
+                          baseFontSize: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: const ScaledText(
+                      'Sample text: This shows how text appears throughout the app.',
+                      baseFontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        fontProvider.resetToDefault();
+                        setState(() {
+                          _isFontSizeChanged = true;
+                        });
+                      },
+                      child: const ScaledText(
+                        'Reset to Default',
+                        baseFontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildWideForm() {
-    return Column(
-      children: [
-        // First row with First Name and Last Name
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildTextField(
-                label: 'First Name',
-                initialValue: _firstName,
-                enabled: isEditable,
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty
-                            ? 'Enter first name'
-                            : null,
-                onSaved: (value) => _firstName = value ?? '',
-                icon: Icons.person,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: _buildTextField(
-                label: 'Last Name',
-                initialValue: _lastName,
-                enabled: isEditable,
-                validator:
-                    (value) =>
-                        value == null || value.isEmpty
-                            ? 'Enter last name'
-                            : null,
-                onSaved: (value) => _lastName = value ?? '',
-                icon: Icons.person_outline,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 16),
-        // Second row with Phone and Email
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildTextField(
-                label: 'Phone Number',
-                initialValue: _phoneNumber,
-                enabled: isEditable,
-                validator: null, // Phone is optional
-                onSaved: (value) => _phoneNumber = value ?? '',
-                icon: Icons.phone,
-                keyboardType: TextInputType.phone,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: _buildTextField(
-                label: 'Email',
-                initialValue: _email,
-                enabled: false,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Enter email';
-                  } else if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                    return 'Enter a valid email address';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _email = value ?? '',
-                icon: Icons.email,
-                keyboardType: TextInputType.emailAddress,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNarrowForm() {
-    return Column(
-      children: [
-        _buildTextField(
-          label: 'First Name',
-          initialValue: _firstName,
-          enabled: isEditable,
-          validator:
-              (value) =>
-                  value == null || value.isEmpty ? 'Enter first name' : null,
-          onSaved: (value) => _firstName = value ?? '',
-          icon: Icons.person,
-        ),
-        SizedBox(height: 15),
-        _buildTextField(
-          label: 'Last Name',
-          initialValue: _lastName,
-          enabled: isEditable,
-          validator:
-              (value) =>
-                  value == null || value.isEmpty ? 'Enter last name' : null,
-          onSaved: (value) => _lastName = value ?? '',
-          icon: Icons.person_outline,
-        ),
-        SizedBox(height: 15),
-        _buildTextField(
-          label: 'Phone Number',
-          initialValue: _phoneNumber,
-          enabled: isEditable,
-          validator: null, // Phone is optional
-          onSaved: (value) => _phoneNumber = value ?? '',
-          icon: Icons.phone,
-          keyboardType: TextInputType.phone,
-        ),
-        SizedBox(height: 15),
-        _buildTextField(
-          label: 'Email',
-          initialValue: _email,
-          enabled: false,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Enter email';
-            } else if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-              return 'Enter a valid email address';
-            }
-            return null;
-          },
-          onSaved: (value) => _email = value ?? '',
-          icon: Icons.email,
-          keyboardType: TextInputType.emailAddress,
-        ),
-      ],
     );
   }
 
   Widget _buildTextField({
     required String label,
-    required String initialValue,
+    required String value,
     required bool enabled,
-    required String? Function(String?)? validator,
-    required void Function(String?) onSaved,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
+    required Function(String?) onSaved,
   }) {
-    final isLargeScreen = MediaQuery.of(context).size.width > 900;
-
     return TextFormField(
-      initialValue: initialValue,
+      initialValue: value,
+      enabled: enabled,
+      onSaved: onSaved,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: Colors.red.withOpacity(0.7)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
+        border: const OutlineInputBorder(),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.red),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xFF27445D), width: 2),
         ),
         filled: true,
         fillColor: enabled ? Colors.white : Colors.grey.shade100,
-        contentPadding: EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: isLargeScreen ? 20 : 16,
+          vertical: 16,
         ),
-        labelStyle: TextStyle(fontSize: isLargeScreen ? 16 : 14),
       ),
       style: TextStyle(
-        color: enabled ? Colors.black87 : Colors.grey,
-        fontSize: isLargeScreen ? 16 : 14,
+        color: enabled ? Colors.black87 : Colors.grey.shade600,
+        fontSize: 16,
       ),
-      enabled: enabled,
-      validator: validator,
-      onSaved: onSaved,
-      keyboardType: keyboardType,
     );
   }
 }

@@ -1,12 +1,13 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'admin_newuserchart.dart';
 
 class AnalysisPage extends StatefulWidget {
-  const AnalysisPage({Key? key}) : super(key: key);
+  const AnalysisPage({super.key});
 
   @override
   State<AnalysisPage> createState() => _AnalysisPageState();
@@ -798,7 +799,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
 class QuizResultsPieChart extends StatelessWidget {
   final QuizResultData data;
 
-  const QuizResultsPieChart({Key? key, required this.data}) : super(key: key);
+  const QuizResultsPieChart({super.key, required this.data});
 
   @override
   Widget build(BuildContext context) {
