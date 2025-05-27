@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'providers/font_size_provider.dart';
 import 'dashboardsidebar.dart';
 import 'services/tts_service.dart'; // Add TTS import
@@ -25,10 +24,6 @@ class _TutorialPage extends State<TutorialPage>
   String? selectedPlatform;
   Map<String, dynamic>? selectedTutorial;
   bool _isTtsEnabled = false; // Track TTS setting
-
-  // Onboarding state
-  bool _showOnboarding = false;
-  bool _hasCheckedOnboarding = false;
 
   // Tab controller for bookmark categories
   late TabController _tabController;
@@ -97,7 +92,6 @@ class _TutorialPage extends State<TutorialPage>
         fetchTutorials();
       }
     });
-    _checkTutorialPageOnboarding(); // Check tutorial-specific onboarding
     _loadTtsPreference();
     fetchTutorials();
   }
@@ -106,78 +100,6 @@ class _TutorialPage extends State<TutorialPage>
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  // Check if this is the user's first time on the tutorial page
-  Future<void> _checkTutorialPageOnboarding() async {
-    if (_hasCheckedOnboarding) return;
-
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        print('🔍 Checking tutorial page onboarding for user: ${user.id}');
-
-        final response =
-            await _supabase
-                .from('users')
-                .select('tutorial_page_visited')
-                .eq('id', user.id)
-                .single();
-
-        final tutorialPageVisited = response['tutorial_page_visited'] ?? false;
-        print('🔍 Tutorial page visited: $tutorialPageVisited');
-
-        if (!tutorialPageVisited && mounted) {
-          // Show tutorial page onboarding for first-time visitors
-          await Future.delayed(const Duration(milliseconds: 1000));
-          setState(() {
-            _showOnboarding = true;
-          });
-        }
-
-        _hasCheckedOnboarding = true;
-      }
-    } catch (e) {
-      print('❌ Error checking tutorial onboarding: $e');
-      // On error, show onboarding for potential first-time users
-      if (mounted) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        setState(() {
-          _showOnboarding = true;
-        });
-      }
-    }
-  }
-
-  // Complete tutorial page onboarding
-  Future<void> _completeTutorialOnboarding() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        await _supabase
-            .from('users')
-            .update({'tutorial_page_visited': true})
-            .eq('id', user.id);
-        print('✅ Tutorial page onboarding completed');
-      }
-    } catch (e) {
-      print('❌ Error completing tutorial onboarding: $e');
-    }
-
-    setState(() {
-      _showOnboarding = false;
-    });
-  }
-
-  // Skip tutorial onboarding
-  void _skipTutorialOnboarding() {
-    _completeTutorialOnboarding();
-  }
-
-  // Go to games and complete onboarding
-  void _goToGames() {
-    _completeTutorialOnboarding();
-    context.go('/games');
   }
 
   // Load TTS preference from user settings
@@ -410,128 +332,6 @@ class _TutorialPage extends State<TutorialPage>
     return interactiveTutorials
         .where((tutorial) => tutorial.platform == selectedPlatform)
         .toList();
-  }
-
-  // Build tutorial page onboarding overlay
-  Widget _buildTutorialOnboardingOverlay(FontSizeProvider fontProvider) {
-    final scaleFactor = fontProvider.fontSize / 16.0;
-
-    return Stack(
-      children: [
-        // Semi-transparent backdrop
-        Container(color: Colors.black.withOpacity(0.7)),
-
-        // Tutorial page onboarding content
-        Positioned.fill(
-          child: SafeArea(
-            child: Center(
-              child: Container(
-                margin: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                padding: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Tutorial page icon
-                    Container(
-                      padding: EdgeInsets.all(16 * scaleFactor.clamp(0.8, 1.2)),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade700,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Icon(
-                        Icons.games,
-                        size: 40 * scaleFactor.clamp(0.8, 1.5),
-                        color: Colors.white,
-                      ),
-                    ),
-
-                    SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Title
-                    Text(
-                      "Welcome to Tutorials!",
-                      style: TextStyle(
-                        fontSize: 24 * scaleFactor,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF27445D),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Description
-                    Text(
-                      "This is your learning hub — a safe, easy-to-use place where you can learn how to use technology step by step. Whether you're new to using a smartphone or just want to explore new skills, our tutorials are here to guide you at your own pace. Ready for some fun learning?",
-                      style: TextStyle(
-                        fontSize: 16 * scaleFactor,
-                        color: Colors.grey.shade700,
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 32 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Action buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Skip button
-                        TextButton(
-                          onPressed: _skipTutorialOnboarding,
-                          child: Text(
-                            'Maybe Later',
-                            style: TextStyle(
-                              fontSize: 14 * scaleFactor,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-
-                        // Go to games button
-                        ElevatedButton(
-                          onPressed: _goToGames,
-                          child: Text(
-                            'Go to Games',
-                            style: TextStyle(
-                              fontSize: 16 * scaleFactor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 32 * scaleFactor.clamp(0.8, 1.2),
-                              vertical: 16 * scaleFactor.clamp(0.8, 1.2),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   // Build interactive tutorials section
@@ -1332,59 +1132,6 @@ class _TutorialPage extends State<TutorialPage>
                     ),
                   ),
                 ),
-
-              // Debug onboarding test button (only shows in debug mode)
-              if (kDebugMode)
-                Positioned(
-                  bottom: 80,
-                  right: 16,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FloatingActionButton.extended(
-                        onPressed: () async {
-                          final user = _supabase.auth.currentUser;
-                          if (user != null) {
-                            try {
-                              await _supabase
-                                  .from('users')
-                                  .update({'tutorial_page_visited': false})
-                                  .eq('id', user.id);
-                              print('✅ Tutorial onboarding reset');
-                              setState(() {
-                                _showOnboarding = true;
-                              });
-                            } catch (e) {
-                              print(
-                                '❌ Error resetting tutorial onboarding: $e',
-                              );
-                            }
-                          }
-                        },
-                        icon: Icon(Icons.refresh),
-                        label: Text('🧪 Test Tutorial Tour'),
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                      SizedBox(height: 8),
-                      FloatingActionButton.extended(
-                        onPressed: () {
-                          setState(() {
-                            _showOnboarding = true;
-                          });
-                        },
-                        icon: Icon(Icons.help_outline),
-                        label: Text('Show Tutorial Tour'),
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Tutorial Page Onboarding Overlay
-              if (_showOnboarding)
-                _buildTutorialOnboardingOverlay(fontProvider),
             ],
           ),
         );

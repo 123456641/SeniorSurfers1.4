@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'games/googlemeet.dart';
 import 'dashboardsidebar.dart';
 import 'providers/font_size_provider.dart';
 import 'widgets/scaled_text.dart';
 import 'services/tts_service.dart'; // Add TTS import
-import 'community forum/comdboard.dart';
 
 class GamesPage extends StatefulWidget {
   const GamesPage({super.key});
@@ -19,10 +17,6 @@ class GamesPage extends StatefulWidget {
 class _GamesPageState extends State<GamesPage> {
   final _supabase = Supabase.instance.client;
   bool _isTtsEnabled = false; // Track TTS setting
-
-  // Onboarding state
-  bool _showOnboarding = false;
-  bool _hasCheckedOnboarding = false;
 
   final List<GameInfo> games = [
     GameInfo(
@@ -38,84 +32,7 @@ class _GamesPageState extends State<GamesPage> {
   @override
   void initState() {
     super.initState();
-    _checkGamesPageOnboarding(); // Check games-specific onboarding
     _loadTtsPreference(); // Load TTS setting
-  }
-
-  // Check if this is the user's first time on the games page
-  Future<void> _checkGamesPageOnboarding() async {
-    if (_hasCheckedOnboarding) return;
-
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        print('🔍 Checking games page onboarding for user: ${user.id}');
-
-        final response =
-            await _supabase
-                .from('users')
-                .select('games_page_visited')
-                .eq('id', user.id)
-                .single();
-
-        final gamesPageVisited = response['games_page_visited'] ?? false;
-        print('🔍 Games page visited: $gamesPageVisited');
-
-        if (!gamesPageVisited && mounted) {
-          // Show games page onboarding for first-time visitors
-          await Future.delayed(const Duration(milliseconds: 1000));
-          setState(() {
-            _showOnboarding = true;
-          });
-        }
-
-        _hasCheckedOnboarding = true;
-      }
-    } catch (e) {
-      print('❌ Error checking games onboarding: $e');
-      // On error, show onboarding for potential first-time users
-      if (mounted) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        setState(() {
-          _showOnboarding = true;
-        });
-      }
-    }
-  }
-
-  // Complete games page onboarding
-  Future<void> _completeGamesOnboarding() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        await _supabase
-            .from('users')
-            .update({'games_page_visited': true})
-            .eq('id', user.id);
-        print('✅ Games page onboarding completed');
-      }
-    } catch (e) {
-      print('❌ Error completing games onboarding: $e');
-    }
-
-    setState(() {
-      _showOnboarding = false;
-    });
-  }
-
-  // Skip games onboarding
-  void _skipGamesOnboarding() {
-    _completeGamesOnboarding();
-  }
-
-  // Start first game and complete onboarding
-  void _goToCommunityForum() {
-    _completeGamesOnboarding();
-    // Navigate to the first available game
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const CommunityForumPage()),
-    );
   }
 
   // Load TTS preference from user settings
@@ -252,128 +169,6 @@ class _GamesPageState extends State<GamesPage> {
     );
   }
 
-  // Build games page onboarding overlay
-  Widget _buildGamesOnboardingOverlay(FontSizeProvider fontProvider) {
-    final scaleFactor = fontProvider.fontSize / 16.0;
-
-    return Stack(
-      children: [
-        // Semi-transparent backdrop
-        Container(color: Colors.black.withOpacity(0.7)),
-
-        // Games page onboarding content
-        Positioned.fill(
-          child: SafeArea(
-            child: Center(
-              child: Container(
-                margin: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                padding: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Games page icon
-                    Container(
-                      padding: EdgeInsets.all(16 * scaleFactor.clamp(0.8, 1.2)),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade700,
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Icon(
-                        Icons.videogame_asset,
-                        size: 40 * scaleFactor.clamp(0.8, 1.5),
-                        color: Colors.white,
-                      ),
-                    ),
-
-                    SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Title
-                    Text(
-                      "Let's Play and Learn!",
-                      style: TextStyle(
-                        fontSize: 24 * scaleFactor,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF27445D),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Description
-                    Text(
-                      "Perfect! You've made it to the games section. Here you can practice what you've learned through fun, interactive games. These games will help reinforce your video calling skills. Ready to start your first game?",
-                      style: TextStyle(
-                        fontSize: 16 * scaleFactor,
-                        color: Colors.grey.shade700,
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 32 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Action buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Skip button
-                        TextButton(
-                          onPressed: _skipGamesOnboarding,
-                          child: Text(
-                            'Explore Later',
-                            style: TextStyle(
-                              fontSize: 14 * scaleFactor,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-
-                        // Start first game button
-                        ElevatedButton(
-                          onPressed: _goToCommunityForum,
-                          child: Text(
-                            'Go to Community Forum',
-                            style: TextStyle(
-                              fontSize: 16 * scaleFactor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade700,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 32 * scaleFactor.clamp(0.8, 1.2),
-                              vertical: 16 * scaleFactor.clamp(0.8, 1.2),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<FontSizeProvider>(
@@ -420,56 +215,6 @@ class _GamesPageState extends State<GamesPage> {
                     ),
                   ),
                 ),
-
-              // Debug onboarding test buttons (only shows in debug mode)
-              if (kDebugMode)
-                Positioned(
-                  bottom: 80,
-                  right: 16,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FloatingActionButton.extended(
-                        onPressed: () async {
-                          final user = _supabase.auth.currentUser;
-                          if (user != null) {
-                            try {
-                              await _supabase
-                                  .from('users')
-                                  .update({'games_page_visited': false})
-                                  .eq('id', user.id);
-                              print('✅ Games onboarding reset');
-                              setState(() {
-                                _showOnboarding = true;
-                              });
-                            } catch (e) {
-                              print('❌ Error resetting games onboarding: $e');
-                            }
-                          }
-                        },
-                        icon: Icon(Icons.refresh),
-                        label: Text('🧪 Test Games Tour'),
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      SizedBox(height: 8),
-                      FloatingActionButton.extended(
-                        onPressed: () {
-                          setState(() {
-                            _showOnboarding = true;
-                          });
-                        },
-                        icon: Icon(Icons.help_outline),
-                        label: Text('Show Games Tour'),
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Games Page Onboarding Overlay
-              if (_showOnboarding) _buildGamesOnboardingOverlay(fontProvider),
             ],
           ),
         );

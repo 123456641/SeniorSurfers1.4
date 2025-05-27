@@ -1,10 +1,12 @@
 // File: Updated main.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:senior_surfers/onboarding.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart'; // Add this import
 import 'providers/font_size_provider.dart'; // Add this import
 import 'services/tts_service.dart'; // Add this import for TTS
+import 'services/onboarding_service.dart'; // ADD THIS: Import onboarding service
 import 'welcome_page.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
@@ -78,7 +80,7 @@ void main() async {
 final GoRouter _router = GoRouter(
   debugLogDiagnostics: true,
   initialLocation: '/', // This stays as '/' which will show Welcome page
-  redirect: (BuildContext context, GoRouterState state) {
+  redirect: (BuildContext context, GoRouterState state) async {
     final supabase = Supabase.instance.client;
     final currentUser = supabase.auth.currentUser;
     final currentPath = state.matchedLocation;
@@ -91,7 +93,7 @@ final GoRouter _router = GoRouter(
       '/login',
       '/signup',
       '/admin-login',
-      '/onboarding', // ADDED: Allow access to onboarding page
+      '/onboarding', // Allow access to onboarding page
     ];
 
     // Check if the user is trying to access admin routes
@@ -114,19 +116,31 @@ final GoRouter _router = GoRouter(
         return '/';
       }
     } else {
-      // User is logged in - SIMPLIFIED redirect logic to prevent crashes
+      // User is logged in - Handle onboarding flow
 
-      // Skip onboarding check if user is already on onboarding page
+      // For login/signup pages, redirect authenticated users
+      if (currentPath == '/login' || currentPath == '/signup') {
+        // UPDATED: Check onboarding status when redirecting from auth pages
+        try {
+          final onboardingService = OnboardingService();
+          final hasCompletedOnboarding =
+              await onboardingService.hasCompletedOnboarding();
+
+          if (!hasCompletedOnboarding) {
+            return '/onboarding'; // Send to onboarding if not completed
+          } else {
+            return '/home1'; // Send to home if onboarding completed
+          }
+        } catch (e) {
+          print('Error checking onboarding status in redirect: $e');
+          return '/home1'; // Default to home on error
+        }
+      }
+
+      // Allow access to onboarding page regardless of completion status
       if (currentPath == '/onboarding') {
         return null;
       }
-
-      // For login/signup pages, redirect authenticated users to HOME1
-      if (currentPath == '/login' || currentPath == '/signup') {
-        return '/home1'; // CHANGED: Redirect to home1 instead of dashboard
-      }
-
-      // NOTE: Onboarding check now happens in HomePage1 itself to prevent crashes
     }
 
     return null;
@@ -139,7 +153,7 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/login', builder: (context, state) => const LoginPagee()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpPage()),
 
-    // ADDED: Onboarding route
+    // UPDATED: Onboarding route - now uses the new onboarding system
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingPage(),
@@ -329,6 +343,10 @@ class MyApp extends StatelessWidget {
           darkTheme: scaledTheme,
           themeMode: ThemeMode.light,
           routerConfig: _router,
+          // ADDED: Wrap the entire app with OnboardingManager
+          builder: (context, child) {
+            return OnboardingManager(child: child ?? Container());
+          },
         );
       },
     );

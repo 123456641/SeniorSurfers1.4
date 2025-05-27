@@ -9,6 +9,7 @@ import 'dashboardsidebar.dart';
 import 'providers/font_size_provider.dart';
 import 'widgets/scaled_text.dart';
 import 'services/tts_service.dart'; // Add TTS import
+import 'services/onboarding_service.dart'; // ADD: Import onboarding service
 
 class HomePage1 extends StatefulWidget {
   const HomePage1({super.key});
@@ -17,15 +18,15 @@ class HomePage1 extends StatefulWidget {
   State<HomePage1> createState() => _HomePage1State();
 }
 
-class _HomePage1State extends State<HomePage1> {
+// ADD: OnboardingMixin to enable centralized onboarding
+class _HomePage1State extends State<HomePage1> with OnboardingMixin {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> featuredTutorials = [];
   bool isLoadingTutorials = false;
   bool _isTtsEnabled = false; // Track TTS setting
-  bool _hasCheckedOnboarding = false; // Track onboarding check
 
-  // Simplified onboarding state - just one step
-  bool _showOnboarding = false;
+  // REMOVED: All built-in onboarding variables (_showOnboarding, _hasCheckedOnboarding, etc.)
+
   final ScrollController _scrollController = ScrollController();
 
   // Map platform names to their image paths
@@ -93,9 +94,10 @@ class _HomePage1State extends State<HomePage1> {
   @override
   void initState() {
     super.initState();
-    _checkOnboardingStatus(); // Check onboarding first
+    // REMOVED: _checkOnboardingStatus() - OnboardingMixin handles this automatically
     _fetchFeaturedTutorials();
     _loadTtsPreference(); // Load TTS setting
+    // OnboardingMixin automatically handles onboarding check
   }
 
   @override
@@ -104,79 +106,7 @@ class _HomePage1State extends State<HomePage1> {
     super.dispose();
   }
 
-  // Check onboarding status
-  Future<void> _checkOnboardingStatus() async {
-    if (_hasCheckedOnboarding) return;
-
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        print('🔍 Checking onboarding status for user: ${user.id}');
-
-        final response =
-            await _supabase
-                .from('users')
-                .select('onboarding_completed')
-                .eq('id', user.id)
-                .single();
-
-        final onboardingCompleted = response['onboarding_completed'] ?? false;
-        print('🔍 Onboarding completed: $onboardingCompleted');
-
-        if (!onboardingCompleted && mounted) {
-          // Show onboarding overlay on homepage
-          await Future.delayed(
-            const Duration(milliseconds: 1000),
-          ); // Wait for page to load
-          setState(() {
-            _showOnboarding = true;
-          });
-        }
-
-        _hasCheckedOnboarding = true;
-      }
-    } catch (e) {
-      print('❌ Error checking onboarding: $e');
-      // On error, show onboarding anyway for first-time users
-      if (mounted) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        setState(() {
-          _showOnboarding = true;
-        });
-      }
-    }
-  }
-
-  // Complete onboarding and mark as done
-  Future<void> _completeOnboarding() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        await _supabase
-            .from('users')
-            .update({'onboarding_completed': true})
-            .eq('id', user.id);
-        print('✅ Onboarding completed');
-      }
-    } catch (e) {
-      print('❌ Error completing onboarding: $e');
-    }
-
-    setState(() {
-      _showOnboarding = false;
-    });
-  }
-
-  // Skip onboarding
-  void _skipOnboarding() {
-    _completeOnboarding();
-  }
-
-  // Go to tutorials and complete onboarding
-  void _goToTutorials() {
-    _completeOnboarding();
-    context.go('/tutorials');
-  }
+  // REMOVED: All built-in onboarding methods (_checkOnboardingStatus, _completeOnboarding, etc.)
 
   // Load TTS preference from user settings
   Future<void> _loadTtsPreference() async {
@@ -492,134 +422,12 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
 
-              // Simple Single-Step Onboarding Overlay
-              if (_showOnboarding) _buildOnboardingOverlay(fontProvider),
+              // REMOVED: Built-in onboarding overlay
+              // The centralized onboarding system will handle this automatically
             ],
           ),
         );
       },
-    );
-  }
-
-  // Simplified single-step onboarding overlay
-  Widget _buildOnboardingOverlay(FontSizeProvider fontProvider) {
-    final scaleFactor = fontProvider.fontSize / 16.0;
-
-    return Stack(
-      children: [
-        // Semi-transparent backdrop
-        Container(color: Colors.black.withOpacity(0.7)),
-
-        // Single onboarding step content
-        Positioned.fill(
-          child: SafeArea(
-            child: Center(
-              child: Container(
-                margin: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                padding: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Welcome icon
-                    Container(
-                      padding: EdgeInsets.all(16 * scaleFactor.clamp(0.8, 1.2)),
-                      decoration: BoxDecoration(
-                        color: Color(0xFF27445D),
-                        borderRadius: BorderRadius.circular(50),
-                      ),
-                      child: Icon(
-                        Icons.waving_hand,
-                        size: 40 * scaleFactor.clamp(0.8, 1.5),
-                        color: Colors.amber.shade400,
-                      ),
-                    ),
-
-                    SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Title
-                    Text(
-                      "Welcome to Your Homepage!",
-                      style: TextStyle(
-                        fontSize: 24 * scaleFactor,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF27445D),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Description
-                    Text(
-                      "This is your personal dashboard where you can access all features. Ready to start learning? Let's explore the tutorials page where you'll find interactive guides and step-by-step lessons!",
-                      style: TextStyle(
-                        fontSize: 16 * scaleFactor,
-                        color: Colors.grey.shade700,
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 32 * scaleFactor.clamp(0.8, 1.2)),
-
-                    // Action buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Skip button
-                        TextButton(
-                          onPressed: _skipOnboarding,
-                          child: Text(
-                            'Skip Tour',
-                            style: TextStyle(
-                              fontSize: 14 * scaleFactor,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-
-                        // Go to tutorials button
-                        ElevatedButton(
-                          onPressed: _goToTutorials,
-                          child: Text(
-                            'Go to Tutorials',
-                            style: TextStyle(
-                              fontSize: 16 * scaleFactor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF27445D),
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 32 * scaleFactor.clamp(0.8, 1.2),
-                              vertical: 16 * scaleFactor.clamp(0.8, 1.2),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -648,7 +456,7 @@ class _HomePage1State extends State<HomePage1> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Debug onboarding test button (only shows in debug mode)
+                    // UPDATED: Debug section now includes centralized onboarding test
                     if (kDebugMode)
                       Container(
                         margin: EdgeInsets.only(bottom: 16),
@@ -658,6 +466,7 @@ class _HomePage1State extends State<HomePage1> {
                             Expanded(
                               child: ElevatedButton.icon(
                                 onPressed: () async {
+                                  // Reset onboarding status for testing
                                   final user = _supabase.auth.currentUser;
                                   if (user != null) {
                                     try {
@@ -667,10 +476,12 @@ class _HomePage1State extends State<HomePage1> {
                                             'onboarding_completed': false,
                                           })
                                           .eq('id', user.id);
-                                      print('✅ Onboarding reset');
-                                      setState(() {
-                                        _showOnboarding = true;
-                                      });
+                                      print('✅ Onboarding reset for testing');
+
+                                      // Start onboarding using centralized system
+                                      OnboardingService().restartOnboarding(
+                                        context,
+                                      );
                                     } catch (e) {
                                       print('❌ Error resetting onboarding: $e');
                                     }
@@ -687,9 +498,8 @@ class _HomePage1State extends State<HomePage1> {
                             SizedBox(width: 12),
                             ElevatedButton.icon(
                               onPressed: () {
-                                setState(() {
-                                  _showOnboarding = true;
-                                });
+                                // Start onboarding tour using centralized system
+                                restartOnboarding(); // From OnboardingMixin
                               },
                               icon: Icon(Icons.help_outline),
                               label: Text('Show Tour'),
@@ -753,7 +563,7 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
-  // Welcome Header
+  // UPDATED: Welcome Header now includes help button
   Widget _buildWelcomeHeader(
     BuildContext context,
     bool isMobile,
@@ -800,6 +610,16 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
               ),
+              // ADD: Help button in welcome header
+              IconButton(
+                onPressed: () => restartOnboarding(), // From OnboardingMixin
+                icon: Icon(
+                  Icons.help_outline,
+                  color: Colors.white,
+                  size: (isMobile ? 28 : 32) * scaleFactor.clamp(0.8, 1.5),
+                ),
+                tooltip: 'Take App Tour',
+              ),
             ],
           ),
           SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
@@ -814,38 +634,74 @@ class _HomePage1State extends State<HomePage1> {
             ),
           ),
           SizedBox(height: 24 * scaleFactor.clamp(0.8, 1.2)),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => context.go('/tutorials'),
-              icon: Icon(
-                Icons.play_arrow,
-                color: const Color(0xFF27445D),
-                size: 24 * scaleFactor.clamp(0.8, 1.5),
-              ),
-              label: Text(
-                "Continue Learning",
-                style: TextStyle(
-                  fontSize: 18 * scaleFactor,
-                  color: const Color(0xFF27445D),
-                  fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => context.go('/tutorials'),
+                  icon: Icon(
+                    Icons.play_arrow,
+                    color: const Color(0xFF27445D),
+                    size: 24 * scaleFactor.clamp(0.8, 1.5),
+                  ),
+                  label: Text(
+                    "Continue Learning",
+                    style: TextStyle(
+                      fontSize: 18 * scaleFactor,
+                      color: const Color(0xFF27445D),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF27445D),
+                    padding: EdgeInsets.symmetric(
+                      horizontal:
+                          (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.3),
+                      vertical:
+                          (isMobile ? 16 : 20) * scaleFactor.clamp(0.8, 1.3),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(
+                        color: Color(0xFF27445D),
+                        width: 2,
+                      ),
+                    ),
+                    elevation: 6,
+                  ),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF27445D),
-                padding: EdgeInsets.symmetric(
-                  horizontal:
-                      (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.3),
-                  vertical: (isMobile ? 16 : 20) * scaleFactor.clamp(0.8, 1.3),
+              SizedBox(width: 12 * scaleFactor.clamp(0.8, 1.2)),
+              OutlinedButton.icon(
+                onPressed: () => restartOnboarding(), // From OnboardingMixin
+                icon: Icon(
+                  Icons.help_outline,
+                  color: Colors.white,
+                  size: 20 * scaleFactor.clamp(0.8, 1.3),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Color(0xFF27445D), width: 2),
+                label: Text(
+                  "Take Tour",
+                  style: TextStyle(
+                    fontSize: 16 * scaleFactor,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                elevation: 6,
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.white, width: 2),
+                  padding: EdgeInsets.symmetric(
+                    horizontal:
+                        (isMobile ? 20 : 24) * scaleFactor.clamp(0.8, 1.3),
+                    vertical:
+                        (isMobile ? 14 : 18) * scaleFactor.clamp(0.8, 1.3),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -1346,14 +1202,24 @@ class _HomePage1State extends State<HomePage1> {
                   ),
                 ),
               ),
+              // ADD: Help button in daily tip
+              IconButton(
+                onPressed: () => restartOnboarding(), // From OnboardingMixin
+                icon: Icon(
+                  Icons.help_outline,
+                  color: Colors.amber.shade700,
+                  size: (isMobile ? 24 : 28) * scaleFactor.clamp(0.8, 1.3),
+                ),
+                tooltip: 'Need help? Take the app tour!',
+              ),
             ],
           ),
           SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
           _buildLongPressText(
             text:
                 _isTtsEnabled
-                    ? "You have text-to-speech enabled! Long press on any text to hear it read aloud. This makes learning easier and more accessible."
-                    : "Did you know you can make text larger throughout this entire app? Go to Settings and adjust the 'Text Size' slider to make reading easier on your eyes! You can also enable 'Read Text Aloud' to have text spoken to you.",
+                    ? "You have text-to-speech enabled! Long press on any text to hear it read aloud. This makes learning easier and more accessible. If you need help navigating the app, tap the help button to take a guided tour!"
+                    : "Did you know you can make text larger throughout this entire app? Go to Settings and adjust the 'Text Size' slider to make reading easier on your eyes! You can also enable 'Read Text Aloud' to have text spoken to you. Need help finding these features? Tap the help button for a guided tour!",
             style: TextStyle(
               fontSize: (isMobile ? 17 : 18) * scaleFactor,
               color: Colors.black,
@@ -1363,20 +1229,41 @@ class _HomePage1State extends State<HomePage1> {
           ),
           if (!_isTtsEnabled) ...[
             SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () => context.go('/settingsD'),
-                icon: Icon(Icons.volume_up, size: 18),
-                label: Text('Enable Read Aloud'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber.shade600,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.go('/settingsD'),
+                    icon: Icon(Icons.volume_up, size: 18),
+                    label: Text('Enable Read Aloud'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber.shade600,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => restartOnboarding(), // From OnboardingMixin
+                  icon: Icon(Icons.tour, size: 18),
+                  label: Text('Take Tour'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -1385,7 +1272,7 @@ class _HomePage1State extends State<HomePage1> {
   }
 }
 
-// Data Models
+// Data Models (unchanged)
 class QuickAction {
   final String title;
   final String description;
