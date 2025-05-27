@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart'; // Add this import
 import 'providers/font_size_provider.dart'; // Add this import
+import 'services/tts_service.dart'; // Add this import for TTS
 import 'welcome_page.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
@@ -33,9 +34,9 @@ import 'practice_mode_apps/GoogleMeetPage/joinmeet3.dart';
 import 'tutorial_page.dart';
 import 'header_widget.dart';
 import 'homepage.dart';
-import 'package:provider/provider.dart';
-import 'providers/font_size_provider.dart';
 import 'interactivegames/gmeet.dart';
+import 'interactivegames/gmeet1.dart';
+import 'onboarding_page.dart'; // ALREADY IMPORTED - GOOD!
 
 // Global instance for notifications
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -50,6 +51,9 @@ void main() async {
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjbmdsaG16ZmdjYmllZWZsemlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI3OTk4MzksImV4cCI6MjA1ODM3NTgzOX0.1HL3EQ_dMoLQoK5fF6A9jY3Uu2BGi99DJeVSAV0bMbs',
   );
+
+  // Initialize TTS
+  await TTSService().initialize();
 
   // Initialize notifications...
   const AndroidInitializationSettings initializationSettingsAndroid =
@@ -71,18 +75,24 @@ void main() async {
   );
 }
 
-// ... (keep all your existing GoRouter configuration exactly the same) ...
 final GoRouter _router = GoRouter(
   debugLogDiagnostics: true,
   initialLocation: '/', // This stays as '/' which will show Welcome page
   redirect: (BuildContext context, GoRouterState state) {
-    // Get the current user
     final supabase = Supabase.instance.client;
     final currentUser = supabase.auth.currentUser;
-
-    // List of public routes that don't require authentication
-    final publicRoutes = ['/', '/login', '/signup', '/admin-login'];
     final currentPath = state.matchedLocation;
+
+    print('🔍 DEBUG: Path: $currentPath, User: ${currentUser?.id}');
+
+    // UPDATED: List of public routes that don't require authentication
+    final publicRoutes = [
+      '/',
+      '/login',
+      '/signup',
+      '/admin-login',
+      '/onboarding', // ADDED: Allow access to onboarding page
+    ];
 
     // Check if the user is trying to access admin routes
     final isGoingToAdminRoute =
@@ -96,25 +106,29 @@ final GoRouter _router = GoRouter(
       return '/admin/analysis';
     }
 
-    // UPDATED: User authentication handling - Always show welcome page first
     if (currentUser == null) {
       // User not logged in - allow access to public routes
       if (publicRoutes.contains(currentPath)) {
-        return null; // Show the requested public route (including welcome page)
+        return null;
       } else {
-        return '/'; // Redirect to welcome page for protected routes
+        return '/';
       }
     } else {
-      // User is logged in
-      // REMOVED: Auto-redirect to dashboard - let users navigate manually
-      // Only redirect login/signup pages since user is already logged in
-      if (currentPath == '/login' || currentPath == '/signup') {
-        return '/dashboard'; // Redirect logged-in users away from login/signup
+      // User is logged in - SIMPLIFIED redirect logic to prevent crashes
+
+      // Skip onboarding check if user is already on onboarding page
+      if (currentPath == '/onboarding') {
+        return null;
       }
-      // Allow logged-in users to visit welcome page if they want
+
+      // For login/signup pages, redirect authenticated users to HOME1
+      if (currentPath == '/login' || currentPath == '/signup') {
+        return '/home1'; // CHANGED: Redirect to home1 instead of dashboard
+      }
+
+      // NOTE: Onboarding check now happens in HomePage1 itself to prevent crashes
     }
 
-    // No redirect needed
     return null;
   },
   routes: [
@@ -124,6 +138,12 @@ final GoRouter _router = GoRouter(
     // Authentication routes
     GoRoute(path: '/login', builder: (context, state) => const LoginPagee()),
     GoRoute(path: '/signup', builder: (context, state) => const SignUpPage()),
+
+    // ADDED: Onboarding route
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingPage(),
+    ),
 
     // Main app routes (require authentication)
     GoRoute(
@@ -160,6 +180,12 @@ final GoRouter _router = GoRouter(
       path: '/gmeet-tutorial',
       builder: (context, state) => const GoogleMeetTutorial(),
     ),
+    // MOVED FROM ADMIN SECTION: Google Meet Join Tutorial
+    GoRoute(
+      path: '/gmeet-join-tutorial',
+      name: 'gmeet-join-tutorial',
+      builder: (context, state) => const GoogleMeetJoinTutorial(),
+    ),
     GoRoute(
       path: '/gmeetDashboard',
       builder: (context, state) => const Gmeet(),
@@ -194,6 +220,7 @@ final GoRouter _router = GoRouter(
           path: '/admin/analysis',
           builder: (context, state) => const AnalysisPage(),
         ),
+        // REMOVED: gmeet-join-tutorial route (moved to main app routes above)
         GoRoute(
           path: '/admin/tutorials',
           builder: (context, state) => const AddTutorialPage(),
@@ -249,7 +276,7 @@ final GoRouter _router = GoRouter(
                   final supabase = Supabase.instance.client;
                   final currentUser = supabase.auth.currentUser;
                   if (currentUser != null) {
-                    context.go('/dashboard'); // Go to dashboard if logged in
+                    context.go('/home1'); // CHANGED: Go to home1 if logged in
                   } else {
                     context.go('/'); // Go to welcome page if not logged in
                   }

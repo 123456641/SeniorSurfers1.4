@@ -576,7 +576,7 @@ class _GoogleMeetTutorialState extends State<GoogleMeetTutorial>
               ),
             ),
             content: Text(
-              'Great job! You\'ve learned how to install Google Meet. Would you like to practice using it?',
+              'Congratulations! You\'ve successfully learned how to install Google Meet. You\'re now ready to connect with family and friends through video calls!',
               style: TextStyle(
                 fontSize: (isMobile ? 16 : 18) * scaleFactor,
                 color: Colors.black87,
@@ -584,48 +584,32 @@ class _GoogleMeetTutorialState extends State<GoogleMeetTutorial>
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  context.go('/tutorials');
-                },
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 16 : 20,
-                    vertical: isMobile ? 10 : 12,
+              // Only one button now - Back to Tutorials
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.go('/tutorials');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 16 : 20,
+                      vertical: isMobile ? 12 : 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 4,
                   ),
-                ),
-                child: Text(
-                  'Back to Tutorials',
-                  style: TextStyle(
-                    fontSize: (isMobile ? 14 : 16) * scaleFactor,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  context.go('/practice');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 16 : 20,
-                    vertical: isMobile ? 10 : 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 4,
-                ),
-                child: Text(
-                  'Practice Now',
-                  style: TextStyle(
-                    fontSize: (isMobile ? 14 : 16) * scaleFactor,
-                    fontWeight: FontWeight.bold,
+                  child: Text(
+                    'Back to Tutorials',
+                    style: TextStyle(
+                      fontSize: (isMobile ? 16 : 18) * scaleFactor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),

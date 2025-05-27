@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'dashboardsidebar.dart';
 import 'providers/font_size_provider.dart';
 import 'widgets/scaled_text.dart';
+import 'services/tts_service.dart'; // Add TTS import
 
 class HomePage1 extends StatefulWidget {
   const HomePage1({super.key});
@@ -19,6 +21,12 @@ class _HomePage1State extends State<HomePage1> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> featuredTutorials = [];
   bool isLoadingTutorials = false;
+  bool _isTtsEnabled = false; // Track TTS setting
+  bool _hasCheckedOnboarding = false; // Track onboarding check
+
+  // Simplified onboarding state - just one step
+  bool _showOnboarding = false;
+  final ScrollController _scrollController = ScrollController();
 
   // Map platform names to their image paths
   final Map<String, String> platformImages = {
@@ -29,6 +37,27 @@ class _HomePage1State extends State<HomePage1> {
     'whatsapp': 'assets/images/practice/whatsapp.png',
     'cliqq': 'assets/images/practice/cliqq.png',
   };
+
+  // Interactive tutorials data (same as TutorialPage)
+  final List<InteractiveTutorial> interactiveTutorials = [
+    InteractiveTutorial(
+      title: 'How to Install Google Meet',
+      description: 'Step-by-step installation guide with audio',
+      platform: 'google_meet',
+      route: '/gmeet-tutorial',
+      color: Colors.green.shade700,
+      features: ['📱 Setup', '🔊 Audio', '👥 Senior'],
+    ),
+    InteractiveTutorial(
+      title: 'How to Join Google Meet',
+      description: 'Learn to join meetings step-by-step with audio guidance',
+      platform: 'google_meet',
+      route: '/gmeet-join-tutorial',
+      color: Colors.green.shade700,
+      features: ['🤝 Join', '🔊 Audio', '👥 Senior'],
+    ),
+    // Add more interactive tutorials here as they become available
+  ];
 
   final List<QuickAction> quickActions = [
     QuickAction(
@@ -43,7 +72,7 @@ class _HomePage1State extends State<HomePage1> {
       description: "Learn technology terms",
       icon: Icons.book,
       color: Colors.green.shade700,
-      route: "/glossary",
+      route: "/techglossary",
     ),
     QuickAction(
       title: "Play Games",
@@ -64,7 +93,184 @@ class _HomePage1State extends State<HomePage1> {
   @override
   void initState() {
     super.initState();
+    _checkOnboardingStatus(); // Check onboarding first
     _fetchFeaturedTutorials();
+    _loadTtsPreference(); // Load TTS setting
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // Check onboarding status
+  Future<void> _checkOnboardingStatus() async {
+    if (_hasCheckedOnboarding) return;
+
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        print('🔍 Checking onboarding status for user: ${user.id}');
+
+        final response =
+            await _supabase
+                .from('users')
+                .select('onboarding_completed')
+                .eq('id', user.id)
+                .single();
+
+        final onboardingCompleted = response['onboarding_completed'] ?? false;
+        print('🔍 Onboarding completed: $onboardingCompleted');
+
+        if (!onboardingCompleted && mounted) {
+          // Show onboarding overlay on homepage
+          await Future.delayed(
+            const Duration(milliseconds: 1000),
+          ); // Wait for page to load
+          setState(() {
+            _showOnboarding = true;
+          });
+        }
+
+        _hasCheckedOnboarding = true;
+      }
+    } catch (e) {
+      print('❌ Error checking onboarding: $e');
+      // On error, show onboarding anyway for first-time users
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+        setState(() {
+          _showOnboarding = true;
+        });
+      }
+    }
+  }
+
+  // Complete onboarding and mark as done
+  Future<void> _completeOnboarding() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        await _supabase
+            .from('users')
+            .update({'onboarding_completed': true})
+            .eq('id', user.id);
+        print('✅ Onboarding completed');
+      }
+    } catch (e) {
+      print('❌ Error completing onboarding: $e');
+    }
+
+    setState(() {
+      _showOnboarding = false;
+    });
+  }
+
+  // Skip onboarding
+  void _skipOnboarding() {
+    _completeOnboarding();
+  }
+
+  // Go to tutorials and complete onboarding
+  void _goToTutorials() {
+    _completeOnboarding();
+    context.go('/tutorials');
+  }
+
+  // Load TTS preference from user settings
+  Future<void> _loadTtsPreference() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await _supabase
+                .from('users')
+                .select('tts_enabled')
+                .eq('id', user.id)
+                .single();
+
+        setState(() {
+          _isTtsEnabled = response['tts_enabled'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error loading TTS preference: $e');
+    }
+  }
+
+  // Function to speak text when long pressed
+  Future<void> _speakText(String text) async {
+    if (_isTtsEnabled && text.isNotEmpty) {
+      await TTSService().speak(text);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.volume_up, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reading: ${text.length > 30 ? text.substring(0, 30) + "..." : text}',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF27445D),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else if (!_isTtsEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.volume_off, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Enable "Read Text Aloud" in Settings to use this feature',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade600,
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Settings',
+            textColor: Colors.white,
+            onPressed: () => context.go('/settingsD'),
+          ),
+        ),
+      );
+    }
+  }
+
+  // Custom widget for long-pressable text
+  Widget _buildLongPressText({
+    required String text,
+    required TextStyle style,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+  }) {
+    return GestureDetector(
+      onLongPress: () => _speakText(text),
+      child: Container(
+        child: Text(
+          text,
+          style: style,
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: overflow,
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchFeaturedTutorials() async {
@@ -73,14 +279,49 @@ class _HomePage1State extends State<HomePage1> {
     });
 
     try {
+      // Fetch database tutorials (exclude PDFs like in TutorialPage)
       final response = await _supabase
           .from('tutorial_files')
           .select()
+          .neq('file_type', 'pdf') // Exclude PDF tutorials
           .order('uploaded_at', ascending: false)
-          .limit(6);
+          .limit(4); // Reduce to make room for interactive tutorials
+
+      List<Map<String, dynamic>> databaseTutorials =
+          List<Map<String, dynamic>>.from(response);
+
+      // Convert interactive tutorials to the same format
+      List<Map<String, dynamic>> interactiveTutorialsMapped =
+          interactiveTutorials
+              .map(
+                (tutorial) => {
+                  'id': 'interactive_${tutorial.route}',
+                  'title': tutorial.title,
+                  'description': tutorial.description,
+                  'platform': tutorial.platform,
+                  'file_type': 'interactive',
+                  'file_url': tutorial.route,
+                  'thumbnail_url': null,
+                  'uploaded_at': DateTime.now().toIso8601String(),
+                  'color': tutorial.color,
+                  'features': tutorial.features,
+                },
+              )
+              .toList();
+
+      // Combine both lists with interactive tutorials first
+      List<Map<String, dynamic>> allTutorials = [
+        ...interactiveTutorialsMapped,
+        ...databaseTutorials,
+      ];
+
+      // Limit to 6 total tutorials for featured section
+      if (allTutorials.length > 6) {
+        allTutorials = allTutorials.take(6).toList();
+      }
 
       setState(() {
-        featuredTutorials = List<Map<String, dynamic>>.from(response);
+        featuredTutorials = allTutorials;
         isLoadingTutorials = false;
       });
     } catch (e) {
@@ -95,7 +336,10 @@ class _HomePage1State extends State<HomePage1> {
     final fileType = tutorial['file_type'];
     final fileUrl = tutorial['file_url'];
 
-    if (fileType == 'link' || fileType == 'pdf') {
+    if (fileType == 'interactive') {
+      // Navigate to interactive tutorial route
+      context.go(fileUrl);
+    } else if (fileType == 'link' || fileType == 'pdf') {
       if (!await launchUrl(
         Uri.parse(fileUrl),
         mode: LaunchMode.externalApplication,
@@ -206,11 +450,176 @@ class _HomePage1State extends State<HomePage1> {
     return Consumer<FontSizeProvider>(
       builder: (context, fontProvider, child) {
         return SidebarLayoutWrapper(
-          currentPage: '/home',
+          currentPage: '/home1',
           pageTitle: 'Welcome Home',
-          child: _buildHomeContent(context, fontProvider),
+          child: Stack(
+            children: [
+              _buildHomeContent(context, fontProvider),
+
+              // TTS Indicator when enabled
+              if (_isTtsEnabled)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF27445D),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.volume_up, size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'TTS On',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Simple Single-Step Onboarding Overlay
+              if (_showOnboarding) _buildOnboardingOverlay(fontProvider),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  // Simplified single-step onboarding overlay
+  Widget _buildOnboardingOverlay(FontSizeProvider fontProvider) {
+    final scaleFactor = fontProvider.fontSize / 16.0;
+
+    return Stack(
+      children: [
+        // Semi-transparent backdrop
+        Container(color: Colors.black.withOpacity(0.7)),
+
+        // Single onboarding step content
+        Positioned.fill(
+          child: SafeArea(
+            child: Center(
+              child: Container(
+                margin: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
+                padding: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Welcome icon
+                    Container(
+                      padding: EdgeInsets.all(16 * scaleFactor.clamp(0.8, 1.2)),
+                      decoration: BoxDecoration(
+                        color: Color(0xFF27445D),
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: Icon(
+                        Icons.waving_hand,
+                        size: 40 * scaleFactor.clamp(0.8, 1.5),
+                        color: Colors.amber.shade400,
+                      ),
+                    ),
+
+                    SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Title
+                    Text(
+                      "Welcome to Your Homepage!",
+                      style: TextStyle(
+                        fontSize: 24 * scaleFactor,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF27445D),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Description
+                    Text(
+                      "This is your personal dashboard where you can access all features. Ready to start learning? Let's explore the tutorials page where you'll find interactive guides and step-by-step lessons!",
+                      style: TextStyle(
+                        fontSize: 16 * scaleFactor,
+                        color: Colors.grey.shade700,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    SizedBox(height: 32 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Action buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Skip button
+                        TextButton(
+                          onPressed: _skipOnboarding,
+                          child: Text(
+                            'Skip Tour',
+                            style: TextStyle(
+                              fontSize: 14 * scaleFactor,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+
+                        // Go to tutorials button
+                        ElevatedButton(
+                          onPressed: _goToTutorials,
+                          child: Text(
+                            'Go to Tutorials',
+                            style: TextStyle(
+                              fontSize: 16 * scaleFactor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFF27445D),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 32 * scaleFactor.clamp(0.8, 1.2),
+                              vertical: 16 * scaleFactor.clamp(0.8, 1.2),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -225,51 +634,117 @@ class _HomePage1State extends State<HomePage1> {
         final scaleFactor = fontProvider.fontSize / 16.0;
 
         return Container(
-          color: Colors.white, // HIGH CONTRAST: Pure white background
+          color: Colors.white,
           child: SingleChildScrollView(
+            controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 16 : (isTablet ? 24 : 32),
               vertical: 16,
             ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Welcome Header
-                  _buildWelcomeHeader(context, isMobile, fontProvider),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Debug onboarding test button (only shows in debug mode)
+                    if (kDebugMode)
+                      Container(
+                        margin: EdgeInsets.only(bottom: 16),
+                        width: double.infinity,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  final user = _supabase.auth.currentUser;
+                                  if (user != null) {
+                                    try {
+                                      await _supabase
+                                          .from('users')
+                                          .update({
+                                            'onboarding_completed': false,
+                                          })
+                                          .eq('id', user.id);
+                                      print('✅ Onboarding reset');
+                                      setState(() {
+                                        _showOnboarding = true;
+                                      });
+                                    } catch (e) {
+                                      print('❌ Error resetting onboarding: $e');
+                                    }
+                                  }
+                                },
+                                icon: Icon(Icons.refresh),
+                                label: Text('🧪 Test Onboarding'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _showOnboarding = true;
+                                });
+                              },
+                              icon: Icon(Icons.help_outline),
+                              label: Text('Show Tour'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                  SizedBox(
-                    height: (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.2),
-                  ),
+                    // Welcome Header
+                    _buildWelcomeHeader(context, isMobile, fontProvider),
 
-                  // Quick Actions
-                  _buildQuickActions(context, isMobile, isTablet, fontProvider),
+                    SizedBox(
+                      height:
+                          (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.2),
+                    ),
 
-                  SizedBox(
-                    height: (isMobile ? 32 : 40) * scaleFactor.clamp(0.8, 1.2),
-                  ),
+                    // Quick Actions
+                    _buildQuickActions(
+                      context,
+                      isMobile,
+                      isTablet,
+                      fontProvider,
+                    ),
 
-                  // Featured Tutorials
-                  _buildFeaturedTutorials(
-                    context,
-                    isMobile,
-                    isTablet,
-                    fontProvider,
-                  ),
+                    SizedBox(
+                      height:
+                          (isMobile ? 32 : 40) * scaleFactor.clamp(0.8, 1.2),
+                    ),
 
-                  SizedBox(
-                    height: (isMobile ? 32 : 40) * scaleFactor.clamp(0.8, 1.2),
-                  ),
+                    // Featured Tutorials
+                    _buildFeaturedTutorials(
+                      context,
+                      isMobile,
+                      isTablet,
+                      fontProvider,
+                    ),
 
-                  // Daily Tips
-                  _buildDailyTip(context, isMobile, fontProvider),
+                    SizedBox(
+                      height:
+                          (isMobile ? 32 : 40) * scaleFactor.clamp(0.8, 1.2),
+                    ),
 
-                  SizedBox(
-                    height: (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.2),
-                  ),
-                ],
+                    // Daily Tips
+                    _buildDailyTip(context, isMobile, fontProvider),
+
+                    SizedBox(
+                      height:
+                          (isMobile ? 40 : 60) * scaleFactor.clamp(0.8, 1.2),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -278,6 +753,7 @@ class _HomePage1State extends State<HomePage1> {
     );
   }
 
+  // Welcome Header
   Widget _buildWelcomeHeader(
     BuildContext context,
     bool isMobile,
@@ -291,7 +767,6 @@ class _HomePage1State extends State<HomePage1> {
         (isMobile ? 24 : 32) * scaleFactor.clamp(0.8, 1.3),
       ),
       decoration: BoxDecoration(
-        // HIGH CONTRAST: Dark blue background with white text
         color: const Color(0xFF27445D),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF27445D), width: 3),
@@ -315,12 +790,12 @@ class _HomePage1State extends State<HomePage1> {
               ),
               SizedBox(width: 16 * scaleFactor.clamp(0.8, 1.2)),
               Expanded(
-                child: Text(
-                  "Welcome Back!",
+                child: _buildLongPressText(
+                  text: "Welcome Back!",
                   style: TextStyle(
                     fontSize: (isMobile ? 28 : 36) * scaleFactor,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white, // HIGH CONTRAST: Pure white text
+                    color: Colors.white,
                     height: 1.2,
                   ),
                 ),
@@ -328,11 +803,12 @@ class _HomePage1State extends State<HomePage1> {
             ],
           ),
           SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-          Text(
-            "Ready to learn something new today? Explore our latest tutorials and connect with your community.",
+          _buildLongPressText(
+            text:
+                "Ready to learn something new today? Explore our latest tutorials and connect with your community.",
             style: TextStyle(
               fontSize: (isMobile ? 18 : 20) * scaleFactor,
-              color: Colors.white, // HIGH CONTRAST: Pure white text
+              color: Colors.white,
               height: 1.6,
               fontWeight: FontWeight.w400,
             ),
@@ -341,9 +817,7 @@ class _HomePage1State extends State<HomePage1> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {
-                context.go('/tutorials');
-              },
+              onPressed: () => context.go('/tutorials'),
               icon: Icon(
                 Icons.play_arrow,
                 color: const Color(0xFF27445D),
@@ -353,15 +827,12 @@ class _HomePage1State extends State<HomePage1> {
                 "Continue Learning",
                 style: TextStyle(
                   fontSize: 18 * scaleFactor,
-                  color: const Color(
-                    0xFF27445D,
-                  ), // HIGH CONTRAST: Dark text on white button
+                  color: const Color(0xFF27445D),
                   fontWeight: FontWeight.bold,
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    Colors.white, // HIGH CONTRAST: Pure white button
+                backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF27445D),
                 padding: EdgeInsets.symmetric(
                   horizontal:
@@ -392,8 +863,8 @@ class _HomePage1State extends State<HomePage1> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Quick Start",
+        _buildLongPressText(
+          text: "Quick Start",
           style: TextStyle(
             fontSize: (isMobile ? 24 : 28) * scaleFactor,
             fontWeight: FontWeight.bold,
@@ -405,24 +876,27 @@ class _HomePage1State extends State<HomePage1> {
           builder: (context, constraints) {
             int crossAxisCount;
             double childAspectRatio;
+            double maxCrossAxisExtent;
 
             if (constraints.maxWidth < 600) {
               crossAxisCount = 2;
-              childAspectRatio =
-                  0.9; // ADJUSTED: Slightly wider to prevent overflow
+              childAspectRatio = 0.85;
+              maxCrossAxisExtent = 200;
             } else if (constraints.maxWidth < 900) {
               crossAxisCount = 3;
-              childAspectRatio = 1.0; // ADJUSTED: More balanced proportions
+              childAspectRatio = 0.9;
+              maxCrossAxisExtent = 250;
             } else {
               crossAxisCount = 4;
-              childAspectRatio = 1.1; // ADJUSTED: Wider for desktop
+              childAspectRatio = 1.0;
+              maxCrossAxisExtent = 300;
             }
 
             return GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: maxCrossAxisExtent,
                 crossAxisSpacing:
                     (isMobile ? 12 : 16) * scaleFactor.clamp(0.8, 1.2),
                 mainAxisSpacing:
@@ -447,11 +921,9 @@ class _HomePage1State extends State<HomePage1> {
     FontSizeProvider fontProvider,
   ) {
     final scaleFactor = fontProvider.fontSize / 16.0;
-
-    // LARGER TITLE TEXT: No description means more space for title
-    final maxTitleSize = isMobile ? 24.0 : 26.0; // LARGER: More space available
-    final titleFontSize = ((isMobile ? 20 : 22) * scaleFactor).clamp(
-      16.0,
+    final maxTitleSize = isMobile ? 20.0 : 22.0;
+    final titleFontSize = ((isMobile ? 16 : 18) * scaleFactor).clamp(
+      14.0,
       maxTitleSize,
     );
 
@@ -463,18 +935,14 @@ class _HomePage1State extends State<HomePage1> {
         side: BorderSide(color: Colors.grey.shade300, width: 2),
       ),
       child: InkWell(
-        onTap: () {
-          context.go(action.route);
-        },
+        onTap: () => context.go(action.route),
+        onLongPress: () => _speakText(action.title),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           width: double.infinity,
+          height: double.infinity,
           padding: EdgeInsets.all(
-            (isMobile ? 20 : 24) *
-                scaleFactor.clamp(
-                  0.9,
-                  1.3,
-                ), // MORE PADDING: More comfortable spacing
+            (isMobile ? 16 : 20) * scaleFactor.clamp(0.8, 1.2),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -482,11 +950,7 @@ class _HomePage1State extends State<HomePage1> {
             children: [
               Container(
                 padding: EdgeInsets.all(
-                  (isMobile ? 14 : 18) *
-                      scaleFactor.clamp(
-                        0.8,
-                        1.3,
-                      ), // LARGER: More space for icon
+                  (isMobile ? 12 : 14) * scaleFactor.clamp(0.8, 1.2),
                 ),
                 decoration: BoxDecoration(
                   color: action.color,
@@ -496,38 +960,28 @@ class _HomePage1State extends State<HomePage1> {
                 child: Icon(
                   action.icon,
                   color: Colors.white,
-                  size:
-                      (isMobile ? 32 : 36) *
-                      scaleFactor.clamp(0.8, 1.4), // LARGER: Bigger icon
+                  size: (isMobile ? 28 : 32) * scaleFactor.clamp(0.8, 1.3),
                 ),
               ),
               SizedBox(
-                height:
-                    (isMobile ? 16 : 20) *
-                    scaleFactor.clamp(
-                      0.8,
-                      1.2,
-                    ), // MORE SPACE: Between icon and title
+                height: (isMobile ? 12 : 16) * scaleFactor.clamp(0.8, 1.1),
               ),
-              // LARGER TITLE: No description means more space and bigger text
-              Container(
-                width: double.infinity,
-                child: Text(
-                  action.title,
-                  style: TextStyle(
-                    fontSize:
-                        titleFontSize, // LARGER: Bigger, more readable text
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                    height: 1.3, // BETTER: More comfortable line height
+              Expanded(
+                child: Center(
+                  child: Text(
+                    action.title,
+                    style: TextStyle(
+                      fontSize: titleFontSize,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines:
-                      3, // MORE LINES: Allow up to 3 lines for longer text
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // REMOVED: Description completely removed
             ],
           ),
         ),
@@ -550,19 +1004,17 @@ class _HomePage1State extends State<HomePage1> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Flexible(
-              child: Text(
-                "Featured for You",
+              child: _buildLongPressText(
+                text: "Featured for You",
                 style: TextStyle(
                   fontSize: (isMobile ? 24 : 28) * scaleFactor,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black, // HIGH CONTRAST: Pure black text
+                  color: Colors.black,
                 ),
               ),
             ),
             TextButton(
-              onPressed: () {
-                context.go('/tutorials');
-              },
+              onPressed: () => context.go('/tutorials'),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 backgroundColor: Colors.grey.shade100,
@@ -575,7 +1027,7 @@ class _HomePage1State extends State<HomePage1> {
                 "See All",
                 style: TextStyle(
                   fontSize: 16 * scaleFactor,
-                  color: Colors.black, // HIGH CONTRAST: Pure black text
+                  color: Colors.black,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -616,20 +1068,20 @@ class _HomePage1State extends State<HomePage1> {
                     color: Colors.grey.shade600,
                   ),
                   SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
-                  Text(
-                    "No tutorials available yet",
+                  _buildLongPressText(
+                    text: "No tutorials available yet",
                     style: TextStyle(
                       fontSize: (isMobile ? 18 : 20) * scaleFactor,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black, // HIGH CONTRAST: Pure black text
+                      color: Colors.black,
                     ),
                   ),
                   SizedBox(height: 10 * scaleFactor.clamp(0.8, 1.2)),
-                  Text(
-                    "Check back later for new content!",
+                  _buildLongPressText(
+                    text: "Check back later for new content!",
                     style: TextStyle(
                       fontSize: (isMobile ? 16 : 18) * scaleFactor,
-                      color: Colors.black87, // HIGH CONTRAST: Very dark text
+                      color: Colors.black87,
                     ),
                   ),
                 ],
@@ -668,18 +1120,21 @@ class _HomePage1State extends State<HomePage1> {
 
     return Card(
       elevation: 8,
-      color: Colors.white, // HIGH CONTRAST: Pure white background
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: Colors.grey.shade300, width: 2),
       ),
       child: InkWell(
         onTap: () => _openTutorial(tutorial),
+        onLongPress:
+            () => _speakText(
+              tutorial['title'] ?? tutorial['file_name'] ?? 'Tutorial',
+            ),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Tutorial Image/Thumbnail
             Container(
               height: (isMobile ? 140 : 160) * scaleFactor.clamp(0.8, 1.3),
               width: double.infinity,
@@ -691,7 +1146,6 @@ class _HomePage1State extends State<HomePage1> {
               ),
               child: Stack(
                 children: [
-                  // Tutorial thumbnail
                   ClipRRect(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(16),
@@ -703,7 +1157,6 @@ class _HomePage1State extends State<HomePage1> {
                       fontProvider: fontProvider,
                     ),
                   ),
-                  // Platform badge
                   Positioned(
                     top: 12 * scaleFactor.clamp(0.8, 1.2),
                     left: 12 * scaleFactor.clamp(0.8, 1.2),
@@ -725,23 +1178,18 @@ class _HomePage1State extends State<HomePage1> {
                         style: TextStyle(
                           fontSize: (isMobile ? 11 : 12) * scaleFactor,
                           fontWeight: FontWeight.bold,
-                          color:
-                              Colors
-                                  .white, // HIGH CONTRAST: White text on colored background
+                          color: Colors.white,
                         ),
                       ),
                     ),
                   ),
-                  // File type indicator
                   Positioned(
                     top: 12 * scaleFactor.clamp(0.8, 1.2),
                     right: 12 * scaleFactor.clamp(0.8, 1.2),
                     child: Container(
                       padding: EdgeInsets.all(8 * scaleFactor.clamp(0.8, 1.2)),
                       decoration: BoxDecoration(
-                        color:
-                            Colors
-                                .black, // HIGH CONTRAST: Pure black background
+                        color: Colors.black,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.white, width: 2),
                       ),
@@ -750,14 +1198,13 @@ class _HomePage1State extends State<HomePage1> {
                             ? Icons.picture_as_pdf
                             : Icons.open_in_new,
                         size: 18 * scaleFactor.clamp(0.8, 1.3),
-                        color: Colors.white, // HIGH CONTRAST: White icon
+                        color: Colors.white,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            // Tutorial Content
             Expanded(
               child: Padding(
                 padding: EdgeInsets.all(
@@ -766,12 +1213,15 @@ class _HomePage1State extends State<HomePage1> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      tutorial['title'] ?? tutorial['file_name'] ?? 'Untitled',
+                    _buildLongPressText(
+                      text:
+                          tutorial['title'] ??
+                          tutorial['file_name'] ??
+                          'Untitled',
                       style: TextStyle(
                         fontSize: (isMobile ? 17 : 19) * scaleFactor,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black, // HIGH CONTRAST: Pure black text
+                        color: Colors.black,
                         height: 1.3,
                       ),
                       maxLines: 2,
@@ -781,12 +1231,11 @@ class _HomePage1State extends State<HomePage1> {
                     if (tutorial['description'] != null &&
                         tutorial['description'].toString().isNotEmpty)
                       Expanded(
-                        child: Text(
-                          tutorial['description'].toString(),
+                        child: _buildLongPressText(
+                          text: tutorial['description'].toString(),
                           style: TextStyle(
                             fontSize: (isMobile ? 15 : 16) * scaleFactor,
-                            color:
-                                Colors.black87, // HIGH CONTRAST: Very dark text
+                            color: Colors.black87,
                             height: 1.4,
                           ),
                           maxLines: 2,
@@ -795,12 +1244,12 @@ class _HomePage1State extends State<HomePage1> {
                       )
                     else
                       Expanded(
-                        child: Text(
-                          "Learn ${tutorial['platform'].toString().replaceAll('_', ' ')} with this step-by-step guide",
+                        child: _buildLongPressText(
+                          text:
+                              "Learn ${tutorial['platform'].toString().replaceAll('_', ' ')} with this step-by-step guide",
                           style: TextStyle(
                             fontSize: (isMobile ? 15 : 16) * scaleFactor,
-                            color:
-                                Colors.black87, // HIGH CONTRAST: Very dark text
+                            color: Colors.black87,
                             height: 1.4,
                           ),
                           maxLines: 2,
@@ -830,7 +1279,7 @@ class _HomePage1State extends State<HomePage1> {
                         Icon(
                           Icons.arrow_forward,
                           size: 20 * scaleFactor.clamp(0.8, 1.3),
-                          color: Colors.black, // HIGH CONTRAST: Black arrow
+                          color: Colors.black,
                         ),
                       ],
                     ),
@@ -857,12 +1306,9 @@ class _HomePage1State extends State<HomePage1> {
         (isMobile ? 24 : 28) * scaleFactor.clamp(0.8, 1.3),
       ),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50, // HIGH CONTRAST: Light amber background
+        color: Colors.amber.shade50,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.amber.shade600,
-          width: 3, // HIGH CONTRAST: Thicker border
-        ),
+        border: Border.all(color: Colors.amber.shade600, width: 3),
         boxShadow: [
           BoxShadow(
             color: Colors.amber.shade200.withOpacity(0.5),
@@ -879,42 +1325,60 @@ class _HomePage1State extends State<HomePage1> {
               Container(
                 padding: EdgeInsets.all(8 * scaleFactor.clamp(0.8, 1.2)),
                 decoration: BoxDecoration(
-                  color:
-                      Colors
-                          .amber
-                          .shade600, // HIGH CONTRAST: Solid amber background
+                  color: Colors.amber.shade600,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.amber.shade700, width: 2),
                 ),
                 child: Icon(
                   Icons.lightbulb,
-                  color: Colors.white, // HIGH CONTRAST: White icon
+                  color: Colors.white,
                   size: (isMobile ? 28 : 32) * scaleFactor.clamp(0.8, 1.5),
                 ),
               ),
               SizedBox(width: 16 * scaleFactor.clamp(0.8, 1.2)),
               Flexible(
-                child: Text(
-                  "Today's Tip",
+                child: _buildLongPressText(
+                  text: "Today's Tip",
                   style: TextStyle(
                     fontSize: (isMobile ? 22 : 24) * scaleFactor,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black, // HIGH CONTRAST: Pure black text
+                    color: Colors.black,
                   ),
                 ),
               ),
             ],
           ),
           SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
-          Text(
-            "Did you know you can make text larger throughout this entire app? Go to Settings and adjust the 'Text Size' slider to make reading easier on your eyes!",
+          _buildLongPressText(
+            text:
+                _isTtsEnabled
+                    ? "You have text-to-speech enabled! Long press on any text to hear it read aloud. This makes learning easier and more accessible."
+                    : "Did you know you can make text larger throughout this entire app? Go to Settings and adjust the 'Text Size' slider to make reading easier on your eyes! You can also enable 'Read Text Aloud' to have text spoken to you.",
             style: TextStyle(
               fontSize: (isMobile ? 17 : 18) * scaleFactor,
-              color: Colors.black, // HIGH CONTRAST: Pure black text
+              color: Colors.black,
               height: 1.6,
               fontWeight: FontWeight.w500,
             ),
           ),
+          if (!_isTtsEnabled) ...[
+            SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () => context.go('/settingsD'),
+                icon: Icon(Icons.volume_up, size: 18),
+                label: Text('Enable Read Aloud'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade600,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -935,5 +1399,23 @@ class QuickAction {
     required this.icon,
     required this.color,
     required this.route,
+  });
+}
+
+class InteractiveTutorial {
+  final String title;
+  final String description;
+  final String platform;
+  final String route;
+  final Color color;
+  final List<String> features;
+
+  InteractiveTutorial({
+    required this.title,
+    required this.description,
+    required this.platform,
+    required this.route,
+    required this.color,
+    required this.features,
   });
 }

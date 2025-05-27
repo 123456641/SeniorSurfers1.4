@@ -39,6 +39,7 @@ dependencies:
   go_router: ^12.0.0  # Use the latest version
   provider: ^6.1.1
   shared_preferences: ^2.2.2
+  audioplayers: ^5.2.1
   
 dev_dependencies:
   flutter_test:
@@ -99,9 +100,14 @@ flutter:
     - assets/images/createmeet3.jpg
     - assets/images/createmeet4.jpg
     - assets/images/createmeet5.jpg
+    - assets/images/tutorial/google_meet_icon.png
+    - assets/images/tutorial/app_stores.png
+    - assets/images/tutorial/search_google_meet.png
+    - assets/images/tutorial/install_button.png
 
 
 
+    
   fonts:
     - family: Caros
       fonts:

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'providers/font_size_provider.dart';
 import 'dashboardsidebar.dart';
+import 'services/tts_service.dart'; // Add TTS import
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
@@ -16,11 +17,118 @@ class _AchievementsPageState extends State<AchievementsPage> {
   List<Achievement> achievements = [];
   bool isLoading = true;
   String? errorMessage;
+  bool _isTtsEnabled = false; // Track TTS setting
 
   @override
   void initState() {
     super.initState();
     _loadAchievements();
+    _loadTtsPreference(); // Load TTS setting
+  }
+
+  // Load TTS preference from user settings
+  Future<void> _loadTtsPreference() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await supabase
+                .from('users')
+                .select('tts_enabled')
+                .eq('id', user.id)
+                .single();
+
+        setState(() {
+          _isTtsEnabled = response['tts_enabled'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error loading TTS preference: $e');
+    }
+  }
+
+  // Function to speak text when long pressed
+  Future<void> _speakText(String text) async {
+    if (_isTtsEnabled && text.isNotEmpty) {
+      try {
+        await TTSService().speak(text);
+
+        // Show feedback to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.volume_up, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Reading: ${text.length > 30 ? text.substring(0, 30) + "..." : text}',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFF27445D),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error in TTS: $e');
+      }
+    } else if (!_isTtsEnabled) {
+      // Show instruction to enable TTS
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.volume_off, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Enable "Read Text Aloud" in Settings to use this feature',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/settingsD'),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // Custom widget for long-pressable text
+  Widget _buildLongPressText({
+    required String text,
+    required TextStyle style,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+  }) {
+    return GestureDetector(
+      onLongPress: () => _speakText(text),
+      child: Container(
+        child: Text(
+          text,
+          style: style,
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: overflow,
+        ),
+      ),
+    );
   }
 
   Future<void> _loadAchievements() async {
@@ -30,129 +138,169 @@ class _AchievementsPageState extends State<AchievementsPage> {
         errorMessage = null;
       });
 
-      // Get user's quiz statistics
+      // Get user's game statistics
       final user = supabase.auth.currentUser;
       Map<String, dynamic> stats = {};
 
       if (user != null) {
-        // Fetch user's quiz results from Supabase
-        final response = await supabase
-            .from('quiz_results')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('platform', 'Google Meet Quiz');
+        // Fetch user's Google Meet Adventure game progress from Supabase
+        final gameProgressResponse =
+            await supabase
+                .from('game_progress')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('game_type', 'Google Meet Adventure')
+                .maybeSingle();
 
-        final results = response as List<dynamic>;
+        // Fetch user's unlocked achievements
+        final achievementsResponse = await supabase
+            .from('user_achievements')
+            .select('achievement_id')
+            .eq('user_id', user.id);
 
-        // Calculate statistics
-        stats = _calculateStats(results);
+        final unlockedAchievements = Set<String>.from(
+          (achievementsResponse as List).map((a) => a['achievement_id']),
+        );
+
+        // Calculate statistics based on adventure game progress
+        stats = _calculateGameStats(gameProgressResponse, unlockedAchievements);
       }
 
-      // Define all available achievements
+      // Define all available achievements based on Google Meet Adventure Game
       achievements = [
         Achievement(
-          id: 'first_play',
-          title: 'First Steps!',
-          description: 'Played Google Meet Quiz for the first time',
+          id: 'hello_emma',
+          title: 'Hello, Emma!',
+          description: 'Successfully joined your first Google Meet call',
           imagePath: 'assets/images/badges/badge1.png',
-          unlocked: stats['gamesPlayed'] >= 1,
+          unlocked:
+              stats['unlockedAchievements']?.contains('hello_emma') ?? false,
           requirement: 1,
-          currentProgress: stats['gamesPlayed'] ?? 0,
-          type: AchievementType.gamesPlayed,
+          currentProgress: stats['levelsCompleted'] >= 1 ? 1 : 0,
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'first_pass',
-          title: 'Getting the Hang of It!',
-          description: 'Passed the Google Meet Quiz once',
+          id: 'camera_ready',
+          title: 'I Can See You!',
+          description: 'Successfully turned on your camera for the first time',
           imagePath: 'assets/images/badges/badge2.png',
-          unlocked: stats['gamesPassed'] >= 1,
-          requirement: 1,
-          currentProgress: stats['gamesPassed'] ?? 0,
-          type: AchievementType.gamesPassed,
+          unlocked:
+              stats['unlockedAchievements']?.contains('camera_ready') ?? false,
+          requirement: 2,
+          currentProgress:
+              stats['levelsCompleted'] >= 2
+                  ? 2
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'five_plays',
-          title: 'Dedicated Learner!',
-          description: 'Played Google Meet Quiz 5 times',
+          id: 'voice_activated',
+          title: 'Can You Hear Me Now?',
+          description: 'Successfully turned on your microphone',
           imagePath: 'assets/images/badges/badge3.png',
-          unlocked: stats['gamesPlayed'] >= 5,
-          requirement: 5,
-          currentProgress: stats['gamesPlayed'] ?? 0,
-          type: AchievementType.gamesPlayed,
+          unlocked:
+              stats['unlockedAchievements']?.contains('voice_activated') ??
+              false,
+          requirement: 3,
+          currentProgress:
+              stats['levelsCompleted'] >= 3
+                  ? 3
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'five_passes',
-          title: 'Meet Master!',
-          description: 'Passed the Google Meet Quiz 5 times',
+          id: 'family_reunion',
+          title: 'Family Reunion Host',
+          description: 'Added family members to a Google Meet call',
           imagePath: 'assets/images/badges/badge4.png',
-          unlocked: stats['gamesPassed'] >= 5,
-          requirement: 5,
-          currentProgress: stats['gamesPassed'] ?? 0,
-          type: AchievementType.gamesPassed,
+          unlocked:
+              stats['unlockedAchievements']?.contains('family_reunion') ??
+              false,
+          requirement: 4,
+          currentProgress:
+              stats['levelsCompleted'] >= 4
+                  ? 4
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'high_score',
-          title: 'Score Champion!',
-          description: 'Achieved a score of 800 or higher',
+          id: 'photo_sharer',
+          title: 'Memory Keeper',
+          description: 'Successfully shared your screen to show photos',
           imagePath: 'assets/images/badges/badge5.png',
-          unlocked: stats['highestScore'] >= 800,
-          requirement: 800,
-          currentProgress: stats['highestScore'] ?? 0,
-          type: AchievementType.highScore,
+          unlocked:
+              stats['unlockedAchievements']?.contains('photo_sharer') ?? false,
+          requirement: 5,
+          currentProgress:
+              stats['levelsCompleted'] >= 5
+                  ? 5
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'perfect_score',
-          title: 'Perfect Performance!',
-          description: 'Achieved a perfect score (1000+)',
+          id: 'social_butterfly',
+          title: 'Grandparents\' Club Member',
+          description: 'Joined a scheduled meeting using a meeting link',
           imagePath: 'assets/images/badges/badge6.png',
-          unlocked: stats['highestScore'] >= 1000,
-          requirement: 1000,
-          currentProgress: stats['highestScore'] ?? 0,
-          type: AchievementType.perfectScore,
+          unlocked:
+              stats['unlockedAchievements']?.contains('social_butterfly') ??
+              false,
+          requirement: 6,
+          currentProgress:
+              stats['levelsCompleted'] >= 6
+                  ? 6
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.levelsCompleted,
         ),
         Achievement(
-          id: 'speed_demon',
-          title: 'Speed Demon!',
-          description:
-              'Completed quiz with average time < 5 seconds per question',
+          id: 'google_meet_graduate',
+          title: 'Google Meet Graduate',
+          description: 'Completed all levels of the Google Meet Adventure',
           imagePath: 'assets/images/badges/badge7.png',
           unlocked:
-              stats['fastestAverageTime'] > 0 &&
-              stats['fastestAverageTime'] < 5,
-          requirement: 5,
-          currentProgress: stats['fastestAverageTime']?.round() ?? 20,
-          type: AchievementType.speed,
+              stats['unlockedAchievements']?.contains('google_meet_graduate') ??
+              false,
+          requirement: 6,
+          currentProgress:
+              stats['levelsCompleted'] >= 6
+                  ? 6
+                  : (stats['levelsCompleted'] ?? 0),
+          type: AchievementType.gameCompletion,
         ),
         Achievement(
-          id: 'difficulty_master',
-          title: 'Difficulty Master!',
-          description: 'Passed quiz on all difficulty levels',
+          id: 'star_collector',
+          title: 'Star Collector',
+          description: 'Earned 10 or more stars in the adventure game',
           imagePath: 'assets/images/badges/badge8.png',
-          unlocked: stats['difficultiesCompleted'] >= 3,
-          requirement: 3,
-          currentProgress: stats['difficultiesCompleted'] ?? 0,
-          type: AchievementType.allDifficulties,
+          unlocked:
+              stats['unlockedAchievements']?.contains('star_collector') ??
+              false,
+          requirement: 10,
+          currentProgress: stats['totalStars'] ?? 0,
+          type: AchievementType.starsEarned,
         ),
         Achievement(
-          id: 'consistent_player',
-          title: 'Consistent Player!',
-          description: 'Played quiz on 7 different days',
+          id: 'family_connector',
+          title: 'Family Bridge Builder',
+          description: 'Connected with all available family members',
           imagePath: 'assets/images/badges/badge9.png',
-          unlocked: stats['uniqueDaysPlayed'] >= 7,
-          requirement: 7,
-          currentProgress: stats['uniqueDaysPlayed'] ?? 0,
-          type: AchievementType.consistency,
+          unlocked:
+              stats['unlockedAchievements']?.contains('family_connector') ??
+              false,
+          requirement: 5,
+          currentProgress: stats['familyMembersUnlocked'] ?? 1,
+          type: AchievementType.familyConnections,
         ),
         Achievement(
-          id: 'adaptive_ace',
-          title: 'Adaptive Ace!',
-          description: 'Achieved skill rating of 1.8+ in adaptive mode',
+          id: 'tech_explorer',
+          title: 'Digital Pioneer',
+          description: 'Completed the adventure game without hints',
           imagePath: 'assets/images/badges/badge10.png',
-          unlocked: stats['highestSkillRating'] >= 1.8,
-          requirement:
-              18, // Displayed as 1.8 but stored as 18 for integer display
-          currentProgress: ((stats['highestSkillRating'] ?? 0.0) * 10).round(),
-          type: AchievementType.skillRating,
+          unlocked:
+              stats['unlockedAchievements']?.contains('tech_explorer') ?? false,
+          requirement: 1,
+          currentProgress: stats['completedWithoutHints'] == true ? 1 : 0,
+          type: AchievementType.expertCompletion,
         ),
       ];
 
@@ -167,70 +315,45 @@ class _AchievementsPageState extends State<AchievementsPage> {
     }
   }
 
-  Map<String, dynamic> _calculateStats(List<dynamic> results) {
-    if (results.isEmpty) {
+  Map<String, dynamic> _calculateGameStats(
+    Map<String, dynamic>? gameProgress,
+    Set<String> unlockedAchievements,
+  ) {
+    if (gameProgress == null) {
       return {
-        'gamesPlayed': 0,
-        'gamesPassed': 0,
-        'highestScore': 0,
-        'fastestAverageTime': 0.0,
-        'difficultiesCompleted': 0,
-        'uniqueDaysPlayed': 0,
-        'highestSkillRating': 0.0,
+        'levelsCompleted': 0,
+        'gameCompleted': false,
+        'totalStars': 0,
+        'familyMembersUnlocked': 1, // Always start with Grandma Rose
+        'completedWithoutHints': false,
+        'unlockedAchievements': unlockedAchievements,
       };
     }
 
-    int gamesPlayed = results.length;
-    int gamesPassed = results.where((r) => r['passed'] == true).length;
-    int highestScore = results
-        .map<int>((r) => r['score'] as int? ?? 0)
-        .reduce((a, b) => a > b ? a : b);
+    int levelsCompleted = gameProgress['current_level'] ?? 0;
+    bool gameCompleted = gameProgress['game_completed'] ?? false;
+    int totalStars = gameProgress['total_stars'] ?? 0;
 
-    // Calculate fastest average time (only from games where time data exists)
-    List<double> avgTimes =
-        results
-            .where((r) => r['average_time_per_question'] != null)
-            .map<double>(
-              (r) => (r['average_time_per_question'] as num).toDouble(),
-            )
-            .toList();
-    double fastestAverageTime =
-        avgTimes.isNotEmpty ? avgTimes.reduce((a, b) => a < b ? a : b) : 0.0;
+    // Count family members unlocked (from comma-separated string)
+    int familyMembersUnlocked = 1; // Start with Grandma Rose
+    if (gameProgress['unlocked_family_members'] != null) {
+      final familyData = gameProgress['unlocked_family_members'] as String;
+      if (familyData.isNotEmpty) {
+        familyMembersUnlocked =
+            familyData.split(',').where((s) => s.trim().isNotEmpty).length;
+      }
+    }
 
-    // Count unique difficulties completed (passed)
-    Set<String> difficultiesCompleted =
-        results
-            .where((r) => r['passed'] == true)
-            .map<String>((r) => r['difficulty'] as String? ?? '')
-            .where((d) => d.isNotEmpty)
-            .toSet();
-
-    // Count unique days played
-    Set<String> uniqueDays =
-        results
-            .map<String>((r) {
-              final dateStr = r['created_at'] as String?;
-              if (dateStr != null) {
-                return DateTime.parse(dateStr).toIso8601String().split('T')[0];
-              }
-              return '';
-            })
-            .where((d) => d.isNotEmpty)
-            .toSet();
-
-    // Get highest skill rating
-    double highestSkillRating = results
-        .map<double>((r) => (r['skill_rating'] as num?)?.toDouble() ?? 0.0)
-        .reduce((a, b) => a > b ? a : b);
+    bool completedWithoutHints =
+        gameProgress['completed_without_hints'] ?? false;
 
     return {
-      'gamesPlayed': gamesPlayed,
-      'gamesPassed': gamesPassed,
-      'highestScore': highestScore,
-      'fastestAverageTime': fastestAverageTime,
-      'difficultiesCompleted': difficultiesCompleted.length,
-      'uniqueDaysPlayed': uniqueDays.length,
-      'highestSkillRating': highestSkillRating,
+      'levelsCompleted': levelsCompleted,
+      'gameCompleted': gameCompleted,
+      'totalStars': totalStars,
+      'familyMembersUnlocked': familyMembersUnlocked,
+      'completedWithoutHints': completedWithoutHints,
+      'unlockedAchievements': unlockedAchievements,
     };
   }
 
@@ -239,10 +362,48 @@ class _AchievementsPageState extends State<AchievementsPage> {
     return SidebarLayoutWrapper(
       currentPage: '/achievements',
       pageTitle: 'Achievements',
-      child:
+      child: Stack(
+        children: [
           isLoading
               ? const Center(child: CircularProgressIndicator())
               : _buildAchievementsList(),
+          // TTS Indicator when enabled
+          if (_isTtsEnabled)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Color(0xFF27445D),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.volume_up, size: 16, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'TTS On',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -254,15 +415,17 @@ class _AchievementsPageState extends State<AchievementsPage> {
           children: [
             Icon(Icons.error_outline, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text(
-              errorMessage!,
-              textAlign: TextAlign.center,
+            _buildLongPressText(
+              text: errorMessage!,
               style: TextStyle(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadAchievements,
-              child: const Text('Retry'),
+            GestureDetector(
+              onLongPress: () => _speakText('Retry'),
+              child: ElevatedButton(
+                onPressed: _loadAchievements,
+                child: const Text('Retry'),
+              ),
             ),
           ],
         ),
@@ -285,9 +448,9 @@ class _AchievementsPageState extends State<AchievementsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Achievements',
-                  style: TextStyle(
+                _buildLongPressText(
+                  text: 'Achievements',
+                  style: const TextStyle(
                     fontSize: 45,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Roboto',
@@ -295,51 +458,65 @@ class _AchievementsPageState extends State<AchievementsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.emoji_events,
-                        color: Colors.blue[700],
-                        size: 32,
+                GestureDetector(
+                  onLongPress:
+                      () => _speakText(
+                        'You have unlocked $unlockedCount out of $totalCount achievements. That is ${completionPercentage.toStringAsFixed(1)} percent complete.',
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$unlockedCount of $totalCount Achievements',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue[700],
-                              ),
-                            ),
-                            Text(
-                              '${completionPercentage.toStringAsFixed(1)}% Complete',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.blue[600],
-                              ),
-                            ),
-                          ],
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.emoji_events,
+                          color: Colors.blue[700],
+                          size: 32,
                         ),
-                      ),
-                      CircularProgressIndicator(
-                        value: completionPercentage / 100,
-                        backgroundColor: Colors.blue[200],
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue[700]!,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLongPressText(
+                                text:
+                                    '$unlockedCount of $totalCount Achievements',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue[700],
+                                ),
+                              ),
+                              _buildLongPressText(
+                                text:
+                                    '${completionPercentage.toStringAsFixed(1)}% Complete',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.blue[600],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        GestureDetector(
+                          onLongPress:
+                              () => _speakText(
+                                'Progress: ${completionPercentage.toStringAsFixed(1)} percent complete',
+                              ),
+                          child: CircularProgressIndicator(
+                            value: completionPercentage / 100,
+                            backgroundColor: Colors.blue[200],
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.blue[700]!,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -352,7 +529,11 @@ class _AchievementsPageState extends State<AchievementsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               itemCount: achievements.length,
               itemBuilder: (context, index) {
-                return AchievementBadge(achievement: achievements[index]);
+                return AchievementBadge(
+                  achievement: achievements[index],
+                  isTtsEnabled: _isTtsEnabled,
+                  onTtsSpeak: _speakText,
+                );
               },
             ),
           ),
@@ -363,14 +544,11 @@ class _AchievementsPageState extends State<AchievementsPage> {
 }
 
 enum AchievementType {
-  gamesPlayed,
-  gamesPassed,
-  highScore,
-  perfectScore,
-  speed,
-  allDifficulties,
-  consistency,
-  skillRating,
+  levelsCompleted,
+  gameCompletion,
+  starsEarned,
+  familyConnections,
+  expertCompletion,
 }
 
 class Achievement {
@@ -397,185 +575,228 @@ class Achievement {
 
 class AchievementBadge extends StatelessWidget {
   final Achievement achievement;
+  final bool isTtsEnabled;
+  final Function(String) onTtsSpeak;
 
-  const AchievementBadge({super.key, required this.achievement});
+  const AchievementBadge({
+    super.key,
+    required this.achievement,
+    required this.isTtsEnabled,
+    required this.onTtsSpeak,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      decoration: BoxDecoration(
-        color: achievement.unlocked ? Colors.white : Colors.grey[100],
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(
-          color: achievement.unlocked ? Colors.green : Colors.grey[400]!,
-          width: 2,
+    // Create comprehensive TTS text for the achievement
+    String achievementTts = '${achievement.title}. ${achievement.description}.';
+    if (achievement.unlocked) {
+      achievementTts += ' This achievement is unlocked!';
+    } else {
+      String progressText = _getProgressText();
+      achievementTts += ' Progress: $progressText. Not yet unlocked.';
+    }
+
+    return GestureDetector(
+      onLongPress: () => onTtsSpeak(achievementTts),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8.0),
+        decoration: BoxDecoration(
+          color: achievement.unlocked ? Colors.white : Colors.grey[100],
+          borderRadius: BorderRadius.circular(16.0),
+          border: Border.all(
+            color: achievement.unlocked ? Colors.green : Colors.grey[400]!,
+            width: 2,
+          ),
+          boxShadow:
+              achievement.unlocked
+                  ? [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                  : null,
         ),
-        boxShadow:
-            achievement.unlocked
-                ? [
-                  BoxShadow(
-                    color: Colors.green.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-                : null,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            // Badge Image
-            Stack(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color:
-                        achievement.unlocked
-                            ? Colors.transparent
-                            : Colors.grey[300],
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      achievement.imagePath,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              // Badge Image
+              Stack(
+                children: [
+                  GestureDetector(
+                    onLongPress:
+                        () => onTtsSpeak(
+                          'Achievement badge for ${achievement.title}',
+                        ),
+                    child: Container(
                       width: 60,
                       height: 60,
-                      fit: BoxFit.cover,
-                      color:
-                          achievement.unlocked
-                              ? null
-                              : Colors.grey.withOpacity(0.6),
-                      colorBlendMode:
-                          achievement.unlocked ? null : BlendMode.modulate,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            achievement.unlocked
+                                ? Colors.transparent
+                                : Colors.grey[300],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          achievement.imagePath,
                           width: 60,
                           height: 60,
-                          decoration: BoxDecoration(
+                          fit: BoxFit.cover,
+                          color:
+                              achievement.unlocked
+                                  ? null
+                                  : Colors.grey.withOpacity(0.6),
+                          colorBlendMode:
+                              achievement.unlocked ? null : BlendMode.modulate,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color:
+                                    achievement.unlocked
+                                        ? Colors.blue[100]
+                                        : Colors.grey[300],
+                              ),
+                              child: Icon(
+                                Icons.emoji_events,
+                                color:
+                                    achievement.unlocked
+                                        ? Colors.blue[700]
+                                        : Colors.grey[500],
+                                size: 30,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (achievement.unlocked)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onLongPress:
+                            () => onTtsSpeak('Achievement unlocked checkmark'),
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
                             shape: BoxShape.circle,
-                            color:
-                                achievement.unlocked
-                                    ? Colors.blue[100]
-                                    : Colors.grey[300],
                           ),
-                          child: Icon(
-                            Icons.emoji_events,
-                            color:
-                                achievement.unlocked
-                                    ? Colors.blue[700]
-                                    : Colors.grey[500],
-                            size: 30,
+                          child: const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 12,
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                if (achievement.unlocked)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 12,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 16),
-
-            // Achievement Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    achievement.title,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color:
-                          achievement.unlocked
-                              ? Colors.black
-                              : Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    achievement.description,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color:
-                          achievement.unlocked
-                              ? Colors.grey[700]
-                              : Colors.grey[500],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Progress indicator
-                  if (!achievement.unlocked) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: LinearProgressIndicator(
-                            value:
-                                achievement.currentProgress /
-                                achievement.requirement,
-                            backgroundColor: Colors.grey[300],
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.blue[400]!,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _getProgressText(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Colors.green[600],
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Unlocked!',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green[600],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+
+              // Achievement Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onLongPress: () => onTtsSpeak(achievement.title),
+                      child: Text(
+                        achievement.title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              achievement.unlocked
+                                  ? Colors.black
+                                  : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onLongPress: () => onTtsSpeak(achievement.description),
+                      child: Text(
+                        achievement.description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color:
+                              achievement.unlocked
+                                  ? Colors.grey[700]
+                                  : Colors.grey[500],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Progress indicator
+                    if (!achievement.unlocked) ...[
+                      GestureDetector(
+                        onLongPress:
+                            () => onTtsSpeak('Progress: ${_getProgressText()}'),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: LinearProgressIndicator(
+                                value:
+                                    achievement.currentProgress /
+                                    achievement.requirement,
+                                backgroundColor: Colors.grey[300],
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.blue[400]!,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _getProgressText(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      GestureDetector(
+                        onLongPress:
+                            () => onTtsSpeak('This achievement is unlocked!'),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.green[600],
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Unlocked!',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[600],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -583,10 +804,10 @@ class AchievementBadge extends StatelessWidget {
 
   String _getProgressText() {
     switch (achievement.type) {
-      case AchievementType.skillRating:
-        double current = achievement.currentProgress / 10.0;
-        double required = achievement.requirement / 10.0;
-        return '${current.toStringAsFixed(1)}/${required.toStringAsFixed(1)}';
+      case AchievementType.expertCompletion:
+        return achievement.currentProgress > 0
+            ? 'Completed!'
+            : 'Not yet achieved';
       default:
         return '${achievement.currentProgress}/${achievement.requirement}';
     }

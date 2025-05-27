@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'providers/font_size_provider.dart';
 import 'dashboardsidebar.dart';
+import 'services/tts_service.dart'; // Add TTS import
 
 class TutorialPage extends StatefulWidget {
   const TutorialPage({super.key});
@@ -25,17 +24,15 @@ class _TutorialPage extends State<TutorialPage>
   bool isLoading = true;
   String? selectedPlatform;
   Map<String, dynamic>? selectedTutorial;
+  bool _isTtsEnabled = false; // Track TTS setting
+
+  // Onboarding state
+  bool _showOnboarding = false;
+  bool _hasCheckedOnboarding = false;
 
   // Tab controller for bookmark categories
   late TabController _tabController;
   int _selectedCategoryIndex = 0;
-
-  // PDF viewing states for mobile
-  bool isPdfViewVisible = false;
-  String? currentPdfUrl;
-  String? currentPdfTitle;
-  bool isPdfLoading = false;
-  String? pdfFilePath;
 
   // Map platform names to their image paths
   final Map<String, String> platformImages = {
@@ -47,7 +44,28 @@ class _TutorialPage extends State<TutorialPage>
     'cliqq': 'assets/images/practice/cliqq.png',
   };
 
-  // Category definitions for bookmark tabs
+  // Interactive tutorials data - removed Google Meet practice tutorial
+  final List<InteractiveTutorial> interactiveTutorials = [
+    InteractiveTutorial(
+      title: 'How to Install Google Meet',
+      description: 'Step-by-step installation guide with audio',
+      platform: 'google_meet',
+      route: '/gmeet-tutorial',
+      color: Colors.green.shade700,
+      features: ['📱 Setup', '🔊 Audio', '👥 Senior'],
+    ),
+    InteractiveTutorial(
+      title: 'How to Join Google Meet',
+      description: 'Learn to join meetings step-by-step with audio guidance',
+      platform: 'google_meet',
+      route: '/gmeet-join-tutorial',
+      color: Colors.green.shade700,
+      features: ['🤝 Join', '🔊 Audio', '👥 Senior'],
+    ),
+    // Add more interactive tutorials here as they become available
+  ];
+
+  // Category definitions for bookmark tabs (Interactive tutorials only)
   final List<CategoryTab> categories = [
     CategoryTab(title: 'All', key: null, color: const Color(0xFF27445D)),
     CategoryTab(
@@ -79,6 +97,8 @@ class _TutorialPage extends State<TutorialPage>
         fetchTutorials();
       }
     });
+    _checkTutorialPageOnboarding(); // Check tutorial-specific onboarding
+    _loadTtsPreference();
     fetchTutorials();
   }
 
@@ -86,6 +106,175 @@ class _TutorialPage extends State<TutorialPage>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  // Check if this is the user's first time on the tutorial page
+  Future<void> _checkTutorialPageOnboarding() async {
+    if (_hasCheckedOnboarding) return;
+
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        print('🔍 Checking tutorial page onboarding for user: ${user.id}');
+
+        final response =
+            await _supabase
+                .from('users')
+                .select('tutorial_page_visited')
+                .eq('id', user.id)
+                .single();
+
+        final tutorialPageVisited = response['tutorial_page_visited'] ?? false;
+        print('🔍 Tutorial page visited: $tutorialPageVisited');
+
+        if (!tutorialPageVisited && mounted) {
+          // Show tutorial page onboarding for first-time visitors
+          await Future.delayed(const Duration(milliseconds: 1000));
+          setState(() {
+            _showOnboarding = true;
+          });
+        }
+
+        _hasCheckedOnboarding = true;
+      }
+    } catch (e) {
+      print('❌ Error checking tutorial onboarding: $e');
+      // On error, show onboarding for potential first-time users
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+        setState(() {
+          _showOnboarding = true;
+        });
+      }
+    }
+  }
+
+  // Complete tutorial page onboarding
+  Future<void> _completeTutorialOnboarding() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        await _supabase
+            .from('users')
+            .update({'tutorial_page_visited': true})
+            .eq('id', user.id);
+        print('✅ Tutorial page onboarding completed');
+      }
+    } catch (e) {
+      print('❌ Error completing tutorial onboarding: $e');
+    }
+
+    setState(() {
+      _showOnboarding = false;
+    });
+  }
+
+  // Skip tutorial onboarding
+  void _skipTutorialOnboarding() {
+    _completeTutorialOnboarding();
+  }
+
+  // Go to games and complete onboarding
+  void _goToGames() {
+    _completeTutorialOnboarding();
+    context.go('/games');
+  }
+
+  // Load TTS preference from user settings
+  Future<void> _loadTtsPreference() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await _supabase
+                .from('users')
+                .select('tts_enabled')
+                .eq('id', user.id)
+                .single();
+
+        setState(() {
+          _isTtsEnabled = response['tts_enabled'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error loading TTS preference: $e');
+    }
+  }
+
+  // Function to speak text when long pressed
+  Future<void> _speakText(String text) async {
+    if (_isTtsEnabled && text.isNotEmpty) {
+      await TTSService().speak(text);
+
+      // Show feedback to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.volume_up, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reading: ${text.length > 30 ? text.substring(0, 30) + "..." : text}',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF27445D),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else if (!_isTtsEnabled) {
+      // Show instruction to enable TTS
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.volume_off, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Enable "Read Text Aloud" in Settings to use this feature',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade600,
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Settings',
+            textColor: Colors.white,
+            onPressed: () => context.go('/settingsD'),
+          ),
+        ),
+      );
+    }
+  }
+
+  // Custom widget for long-pressable text
+  Widget _buildLongPressText({
+    required String text,
+    required TextStyle style,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+  }) {
+    return GestureDetector(
+      onLongPress: () => _speakText(text),
+      child: Container(
+        child: Text(
+          text,
+          style: style,
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: overflow,
+        ),
+      ),
+    );
   }
 
   // Helper method to get font size safely
@@ -97,7 +286,6 @@ class _TutorialPage extends State<TutorialPage>
       );
       return fontSizeProvider.fontSize * multiplier;
     } catch (e) {
-      // Fallback to default font size if provider not found
       return 16.0 * multiplier;
     }
   }
@@ -113,8 +301,8 @@ class _TutorialPage extends State<TutorialPage>
     int? maxLines,
     TextOverflow? overflow,
   }) {
-    return Text(
-      text,
+    return _buildLongPressText(
+      text: text,
       style: TextStyle(
         fontSize: _getFontSize(context, multiplier: multiplier),
         fontWeight: fontWeight,
@@ -122,7 +310,7 @@ class _TutorialPage extends State<TutorialPage>
       ),
       textAlign: textAlign,
       maxLines: maxLines,
-      overflow: overflow ?? TextOverflow.ellipsis, // Default overflow handling
+      overflow: overflow ?? TextOverflow.ellipsis,
     );
   }
 
@@ -132,9 +320,11 @@ class _TutorialPage extends State<TutorialPage>
     });
 
     try {
+      // Filter tutorials to exclude PDFs - only keep interactive/link types
       final response = await _supabase
           .from('tutorial_files')
           .select()
+          .neq('file_type', 'pdf') // Exclude PDF tutorials
           .order('uploaded_at', ascending: false);
 
       List<Map<String, dynamic>> filteredTutorials = [];
@@ -178,56 +368,6 @@ class _TutorialPage extends State<TutorialPage>
     }
   }
 
-  // Mobile-specific PDF handling
-  Future<void> _handlePdfFile(String url, String title) async {
-    setState(() {
-      isPdfLoading = true;
-      isPdfViewVisible = true;
-      currentPdfTitle = title;
-      currentPdfUrl = url;
-      pdfFilePath = null;
-    });
-
-    await _downloadAndOpenPdfMobile(url);
-  }
-
-  Future<void> _downloadAndOpenPdfMobile(String url) async {
-    try {
-      final directory = await getTemporaryDirectory();
-      final filePath =
-          '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final file = File(filePath);
-
-      final response = await http.get(Uri.parse(url));
-
-      if (response.statusCode == 200) {
-        await file.writeAsBytes(response.bodyBytes);
-        setState(() {
-          pdfFilePath = filePath;
-          isPdfLoading = false;
-        });
-      } else {
-        throw Exception('Failed to download PDF: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error downloading PDF: $e');
-      setState(() {
-        isPdfLoading = false;
-        isPdfViewVisible = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not load PDF: $e. Opening in external app.'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      }
-    }
-  }
-
   Future<void> _openTutorial(Map<String, dynamic> tutorial) async {
     setState(() {
       selectedTutorial = tutorial;
@@ -235,8 +375,8 @@ class _TutorialPage extends State<TutorialPage>
 
     final fileType = tutorial['file_type'];
     final fileUrl = tutorial['file_url'];
-    final title = tutorial['title'] ?? tutorial['file_name'] ?? 'Untitled';
 
+    // Only handle link types since we removed PDF support
     if (fileType == 'link') {
       if (!await launchUrl(
         Uri.parse(fileUrl),
@@ -246,40 +386,6 @@ class _TutorialPage extends State<TutorialPage>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Could not open link: $fileUrl')),
           );
-        }
-      }
-    } else if (fileType == 'pdf') {
-      try {
-        final response = await http
-            .head(Uri.parse(fileUrl))
-            .timeout(const Duration(seconds: 5));
-
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          _handlePdfFile(fileUrl, title);
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'PDF URL returned error ${response.statusCode}. Opening in external app.',
-                ),
-                duration: const Duration(seconds: 4),
-              ),
-            );
-            launchUrl(Uri.parse(fileUrl), mode: LaunchMode.externalApplication);
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Issue checking PDF URL: $e. Attempting to open anyway.',
-              ),
-              duration: const Duration(seconds: 3),
-            ),
-          );
-          _handlePdfFile(fileUrl, title);
         }
       }
     } else {
@@ -296,323 +402,387 @@ class _TutorialPage extends State<TutorialPage>
     }
   }
 
-  // FIXED: Compact special tutorial section with smaller size
-  Widget _buildSpecialTutorials() {
-    return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 8,
-      ), // SMALLER: Reduced margins
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.green.shade50, Colors.blue.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(
-          12,
-        ), // SMALLER: Reduced border radius
-        border: Border.all(color: Colors.blue.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8, // SMALLER: Reduced blur
-            offset: const Offset(0, 2), // SMALLER: Reduced offset
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(
-          12,
-        ), // SMALLER: Reduced padding from 20 to 12
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // SMALLER: Compact header row
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(
-                    8,
-                  ), // SMALLER: Reduced padding from 12 to 8
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(
-                      8,
-                    ), // SMALLER: Reduced radius
-                  ),
-                  child: Icon(
-                    Icons.stars,
-                    color: Colors.green.shade700,
-                    size: 20, // SMALLER: Reduced from 28 to 20
-                  ),
-                ),
-                const SizedBox(width: 12), // SMALLER: Reduced from 16 to 12
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildText(
-                        'Interactive Tutorials',
-                        context,
-                        multiplier: 1.1, // SMALLER: Reduced from 1.3 to 1.1
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF27445D),
-                        maxLines: 1, // SMALLER: Reduced from 2 to 1
-                      ),
-                      const SizedBox(height: 2), // SMALLER: Reduced from 4 to 2
-                      _buildText(
-                        'Step-by-step guided tutorials with audio',
-                        context,
-                        multiplier: 0.8, // SMALLER: Reduced from 0.9 to 0.8
-                        color: Colors.grey.shade600,
-                        maxLines: 1, // SMALLER: Reduced from 2 to 1
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12), // SMALLER: Reduced from 20 to 12
-            // SMALLER: Compact Google Meet Installation Tutorial Button
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(
-                  10,
-                ), // SMALLER: Reduced radius
-                border: Border.all(color: Colors.green.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 3, // SMALLER: Reduced blur
-                    offset: const Offset(0, 1), // SMALLER: Reduced offset
-                  ),
-                ],
-              ),
-              child: InkWell(
-                onTap: () {
-                  context.go('/gmeet-tutorial');
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding: const EdgeInsets.all(
-                    12,
-                  ), // SMALLER: Reduced from 16 to 12
-                  child: Row(
-                    children: [
-                      // SMALLER: Compact leading icon
-                      Container(
-                        padding: const EdgeInsets.all(
-                          8,
-                        ), // SMALLER: Reduced padding
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Image.asset(
-                          'assets/images/practice/gmeet.png',
-                          width: 24, // SMALLER: Reduced from 32 to 24
-                          height: 24,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              Icons.video_call,
-                              color: Colors.green.shade700,
-                              size: 24, // SMALLER: Reduced from 32 to 24
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(
-                        width: 12,
-                      ), // SMALLER: Reduced from 16 to 12
-                      // SMALLER: Compact content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildText(
-                              'How to Install Google Meet',
-                              context,
-                              multiplier:
-                                  1.0, // SMALLER: Reduced from 1.1 to 1.0
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF27445D),
-                              maxLines: 1, // SMALLER: Reduced from 2 to 1
-                            ),
-                            const SizedBox(
-                              height: 4,
-                            ), // SMALLER: Reduced from 8 to 4
-                            _buildText(
-                              'Interactive guide with audio',
-                              context,
-                              multiplier:
-                                  0.8, // SMALLER: Reduced from 0.9 to 0.8
-                              color: Colors.grey.shade600,
-                              maxLines: 1, // SMALLER: Reduced from 2 to 1
-                            ),
-                            const SizedBox(
-                              height: 6,
-                            ), // SMALLER: Reduced from 8 to 6
-                            // SMALLER: Compact feature badges
-                            SingleChildScrollView(
-                              // SMALLER: Add scroll for overflow
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                // SMALLER: Use Row instead of Wrap for more compact layout
-                                children: [
-                                  _buildCompactFeatureBadge(
-                                    '📱 Setup',
-                                    Colors.blue,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  _buildCompactFeatureBadge(
-                                    '🔊 Audio',
-                                    Colors.green,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  _buildCompactFeatureBadge(
-                                    '👥 Senior',
-                                    Colors.purple,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8), // SMALLER: Reduced from 16 to 8
-                      // SMALLER: Compact trailing icon
-                      Container(
-                        padding: const EdgeInsets.all(
-                          6,
-                        ), // SMALLER: Reduced from 8 to 6
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade600,
-                          borderRadius: BorderRadius.circular(
-                            6,
-                          ), // SMALLER: Reduced radius
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow,
-                          color: Colors.white,
-                          size: 18, // SMALLER: Reduced from 24 to 18
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+  // Get filtered interactive tutorials based on selected platform
+  List<InteractiveTutorial> getFilteredInteractiveTutorials() {
+    if (selectedPlatform == null) {
+      return interactiveTutorials;
+    }
+    return interactiveTutorials
+        .where((tutorial) => tutorial.platform == selectedPlatform)
+        .toList();
+  }
 
-            const SizedBox(height: 10), // SMALLER: Reduced from 16 to 10
-            // SMALLER: Compact Coming Soon Section
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
-                10,
-              ), // SMALLER: Reduced from 16 to 10
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(
-                  8,
-                ), // SMALLER: Reduced radius
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.construction,
-                    color: Colors.amber.shade700,
-                    size: 18, // SMALLER: Reduced from 24 to 18
-                  ),
-                  const SizedBox(width: 8), // SMALLER: Reduced from 12 to 8
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+  // Build tutorial page onboarding overlay
+  Widget _buildTutorialOnboardingOverlay(FontSizeProvider fontProvider) {
+    final scaleFactor = fontProvider.fontSize / 16.0;
+
+    return Stack(
+      children: [
+        // Semi-transparent backdrop
+        Container(color: Colors.black.withOpacity(0.7)),
+
+        // Tutorial page onboarding content
+        Positioned.fill(
+          child: SafeArea(
+            child: Center(
+              child: Container(
+                margin: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
+                padding: EdgeInsets.all(24 * scaleFactor.clamp(0.8, 1.2)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tutorial page icon
+                    Container(
+                      padding: EdgeInsets.all(16 * scaleFactor.clamp(0.8, 1.2)),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade700,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: Icon(
+                        Icons.games,
+                        size: 40 * scaleFactor.clamp(0.8, 1.5),
+                        color: Colors.white,
+                      ),
+                    ),
+
+                    SizedBox(height: 20 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Title
+                    Text(
+                      "Welcome to Tutorials!",
+                      style: TextStyle(
+                        fontSize: 24 * scaleFactor,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF27445D),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    SizedBox(height: 16 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Description
+                    Text(
+                      "This is your learning hub — a safe, easy-to-use place where you can learn how to use technology step by step. Whether you're new to using a smartphone or just want to explore new skills, our tutorials are here to guide you at your own pace. Ready for some fun learning?",
+                      style: TextStyle(
+                        fontSize: 16 * scaleFactor,
+                        color: Colors.grey.shade700,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+
+                    SizedBox(height: 32 * scaleFactor.clamp(0.8, 1.2)),
+
+                    // Action buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildText(
-                          'More Interactive Tutorials Coming Soon!',
-                          context,
-                          multiplier: 0.9, // SMALLER: Reduced from 1.0 to 0.9
-                          fontWeight: FontWeight.w600,
-                          color: Colors.amber.shade800,
-                          maxLines: 1, // SMALLER: Reduced from 2 to 1
+                        // Skip button
+                        TextButton(
+                          onPressed: _skipTutorialOnboarding,
+                          child: Text(
+                            'Maybe Later',
+                            style: TextStyle(
+                              fontSize: 14 * scaleFactor,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
                         ),
-                        const SizedBox(
-                          height: 2,
-                        ), // SMALLER: Reduced from 4 to 2
-                        _buildText(
-                          'Zoom, WhatsApp, and more apps coming',
-                          context,
-                          multiplier:
-                              0.75, // SMALLER: Reduced from 0.85 to 0.75
-                          color: Colors.amber.shade700,
-                          maxLines: 1, // SMALLER: Reduced from 3 to 1
+
+                        // Go to games button
+                        ElevatedButton(
+                          onPressed: _goToGames,
+                          child: Text(
+                            'Go to Games',
+                            style: TextStyle(
+                              fontSize: 16 * scaleFactor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange.shade700,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 32 * scaleFactor.clamp(0.8, 1.2),
+                              vertical: 16 * scaleFactor.clamp(0.8, 1.2),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Build interactive tutorials section
+  Widget _buildInteractiveTutorials() {
+    final filteredTutorials = getFilteredInteractiveTutorials();
+
+    if (filteredTutorials.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.construction, color: Colors.amber.shade700, size: 48),
+            SizedBox(height: 12),
+            _buildText(
+              'Interactive Tutorials Coming Soon!',
+              context,
+              multiplier: 1.1,
+              fontWeight: FontWeight.bold,
+              color: Colors.amber.shade800,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            _buildText(
+              selectedPlatform != null
+                  ? 'Interactive tutorials for ${selectedPlatform!.replaceAll('_', ' ')} are in development'
+                  : 'More interactive tutorials are being developed',
+              context,
+              multiplier: 0.9,
+              color: Colors.amber.shade700,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
           ],
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade50, Colors.green.shade50],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.play_circle_fill,
+                  color: Colors.blue.shade700,
+                  size: 32,
+                ),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildText(
+                      'Interactive Tutorials',
+                      context,
+                      multiplier: 1.3,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF27445D),
+                    ),
+                    SizedBox(height: 4),
+                    _buildText(
+                      'Step-by-step guided tutorials with audio and practice',
+                      context,
+                      multiplier: 0.9,
+                      color: Colors.grey.shade600,
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Interactive tutorials list
+        ...filteredTutorials
+            .map((tutorial) => _buildInteractiveTutorialCard(tutorial))
+            .toList(),
+      ],
+    );
+  }
+
+  Widget _buildInteractiveTutorialCard(InteractiveTutorial tutorial) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tutorial.color.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => context.go(tutorial.route),
+        onLongPress:
+            () => _speakText('${tutorial.title}. ${tutorial.description}'),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tutorial icon/image
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: tutorial.color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: tutorial.color.withOpacity(0.3)),
+                  ),
+                  child: Image.asset(
+                    platformImages[tutorial.platform] ??
+                        'assets/images/practice/document.png',
+                    width: 32,
+                    height: 32,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        Icons.play_circle_fill,
+                        color: tutorial.color,
+                        size: 32,
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(width: 16),
+
+                // Tutorial content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildText(
+                        tutorial.title,
+                        context,
+                        multiplier: 1.1,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF27445D),
+                        maxLines: 2,
+                      ),
+                      SizedBox(height: 6),
+                      _buildText(
+                        tutorial.description,
+                        context,
+                        multiplier: 0.9,
+                        color: Colors.grey.shade600,
+                        maxLines: 2,
+                      ),
+                      SizedBox(height: 12),
+
+                      // Feature badges - Fix overflow here
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width - 200,
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children:
+                                tutorial.features
+                                    .map(
+                                      (feature) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 6,
+                                        ),
+                                        child: _buildFeatureBadge(
+                                          feature,
+                                          tutorial.color,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 12),
+
+                // Play button
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: tutorial.color,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // SMALLER: Compact feature badge with smaller dimensions
-  Widget _buildCompactFeatureBadge(String text, Color color) {
-    final HSLColor hslColor = HSLColor.fromColor(color);
-    final Color darkColor = hslColor.withLightness(0.3).toColor();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 2,
-      ), // SMALLER: Reduced padding
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8), // SMALLER: Reduced radius
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: _buildText(
-        text,
-        context,
-        multiplier: 0.65, // SMALLER: Reduced from 0.75 to 0.65
-        color: darkColor,
-        fontWeight: FontWeight.w500,
-        maxLines: 1,
-      ),
-    );
-  }
-
-  // FIXED: Feature badge with constrained width (kept for compatibility)
   Widget _buildFeatureBadge(String text, Color color) {
-    final HSLColor hslColor = HSLColor.fromColor(color);
-    final Color darkColor = hslColor.withLightness(0.3).toColor();
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: _buildText(
         text,
         context,
-        multiplier: 0.75,
-        color: darkColor,
-        fontWeight: FontWeight.w500,
+        multiplier: 0.65,
+        color: color,
+        fontWeight: FontWeight.w600,
         maxLines: 1,
       ),
     );
   }
 
-  // FIXED: Bookmark tabs with proper scrolling and responsive sizing
   Widget _buildBookmarkTabs() {
     return Container(
       height: 60,
@@ -627,16 +797,13 @@ class _TutorialPage extends State<TutorialPage>
         ],
       ),
       child: SingleChildScrollView(
-        // FIXED: Ensure horizontal scrolling
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
-          // FIXED: Use Row instead of ListView.builder for better control
           children: List.generate(categories.length, (index) {
             final category = categories[index];
             final isSelected = index == _selectedCategoryIndex;
 
-            // FIXED: Calculate dynamic width based on text length and screen size
             final screenWidth = MediaQuery.of(context).size.width;
             final baseWidth = screenWidth < 600 ? 80.0 : 100.0;
             final textLength = category.title.length;
@@ -649,6 +816,7 @@ class _TutorialPage extends State<TutorialPage>
               onTap: () {
                 _tabController.animateTo(index);
               },
+              onLongPress: () => _speakText(category.title), // Add TTS to tabs
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -658,7 +826,7 @@ class _TutorialPage extends State<TutorialPage>
                     isSelected: isSelected,
                   ),
                   child: Container(
-                    width: dynamicWidth, // FIXED: Use dynamic width
+                    width: dynamicWidth,
                     height: 44,
                     alignment: Alignment.center,
                     padding: const EdgeInsets.only(
@@ -688,81 +856,6 @@ class _TutorialPage extends State<TutorialPage>
           }),
         ),
       ),
-    );
-  }
-
-  Widget _buildPdfViewer() {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF27445D),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            setState(() {
-              isPdfViewVisible = false;
-              pdfFilePath = null;
-            });
-          },
-        ),
-        title: Text(
-          currentPdfTitle ?? 'PDF Viewer',
-          style: TextStyle(
-            fontSize: _getFontSize(context),
-            fontWeight: FontWeight.bold,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            onPressed: () {
-              if (currentPdfUrl != null) {
-                launchUrl(
-                  Uri.parse(currentPdfUrl!),
-                  mode: LaunchMode.externalApplication,
-                );
-              }
-            },
-            tooltip: 'Open in external app',
-          ),
-        ],
-      ),
-      body:
-          isPdfLoading
-              ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    _buildText('Loading PDF...', context),
-                  ],
-                ),
-              )
-              : pdfFilePath != null
-              ? PDFView(
-                filePath: pdfFilePath!,
-                enableSwipe: true,
-                swipeHorizontal: false,
-                autoSpacing: true,
-                pageFling: true,
-                pageSnap: true,
-                fitPolicy: FitPolicy.BOTH,
-                onError: (error) {
-                  print('Error loading PDF: $error');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error loading PDF: $error')),
-                  );
-                },
-                onPageError: (page, error) {
-                  print('Error loading page $page: $error');
-                },
-              )
-              : const Center(child: Text('Failed to load PDF')),
     );
   }
 
@@ -821,9 +914,8 @@ class _TutorialPage extends State<TutorialPage>
     }
   }
 
-  // FIXED: Tutorial detail with proper overflow handling
   Widget _buildTutorialDetail(Map<String, dynamic> tutorial) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -848,7 +940,7 @@ class _TutorialPage extends State<TutorialPage>
               ),
             ),
 
-          // FIXED: Tutorial image with proper constraints
+          // Tutorial image with proper constraints
           Center(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -868,10 +960,9 @@ class _TutorialPage extends State<TutorialPage>
           ),
           const SizedBox(height: 24),
 
-          // FIXED: Title with overflow handling
+          // Title with overflow handling
           Center(
             child: ConstrainedBox(
-              // FIXED: Add constraints
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.9,
               ),
@@ -882,7 +973,7 @@ class _TutorialPage extends State<TutorialPage>
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF27445D),
                 textAlign: TextAlign.center,
-                maxLines: 3, // FIXED: Add maxLines
+                maxLines: 3,
               ),
             ),
           ),
@@ -905,70 +996,70 @@ class _TutorialPage extends State<TutorialPage>
                 multiplier: 0.9,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-                maxLines: 1, // FIXED: Add maxLines
+                maxLines: 1,
               ),
             ),
           ),
           const SizedBox(height: 20),
 
-          // FIXED: Description with overflow handling
+          // Description with overflow handling
           if (tutorial['description'] != null &&
               tutorial['description'].toString().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: _buildText(
-                tutorial['description'].toString(),
-                context,
-                color: Colors.grey[700],
-                maxLines: 10, // FIXED: Add reasonable maxLines
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width - 32,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: _buildText(
+                  tutorial['description'].toString(),
+                  context,
+                  color: Colors.grey[700],
+                  maxLines: 10,
+                ),
               ),
             ),
           const SizedBox(height: 32),
 
           // Action button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: Icon(
-                tutorial['file_type'] == 'pdf'
-                    ? Icons.picture_as_pdf
-                    : Icons.open_in_new,
-                color: Colors.white,
-              ),
-              label: Text(
-                tutorial['file_type'] == 'pdf' ? 'Open PDF' : 'Open Tutorial',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: _getFontSize(context),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width - 32,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.open_in_new, color: Colors.white),
+                label: Text(
+                  'Open Tutorial',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: _getFontSize(context),
+                  ),
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF27445D),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27445D),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                final fileType = tutorial['file_type'];
-                final fileUrl = tutorial['file_url'];
-                final title =
-                    tutorial['title'] ?? tutorial['file_name'] ?? 'Untitled';
-
-                if (fileType == 'pdf') {
-                  _handlePdfFile(fileUrl, title);
-                } else {
+                onPressed: () {
+                  final fileUrl = tutorial['file_url'];
                   launchUrl(
                     Uri.parse(fileUrl),
                     mode: LaunchMode.externalApplication,
                   );
-                }
-              },
+                },
+              ),
             ),
           ),
+
+          // Add bottom padding to prevent overflow
+          const SizedBox(height: 20),
         ],
       ),
     );
@@ -979,174 +1070,200 @@ class _TutorialPage extends State<TutorialPage>
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Column(
-      children: [
-        // Special tutorials section at the top
-        _buildSpecialTutorials(),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Interactive tutorials section
+          _buildInteractiveTutorials(),
 
-        // Existing tutorials list
-        Expanded(
-          child:
-              tutorials.isEmpty
-                  ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.search_off,
-                            size: 80,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildText(
-                            'No tutorials available',
-                            context,
-                            multiplier: 1.2,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(height: 8),
-                          _buildText(
-                            selectedPlatform != null
-                                ? 'Try selecting a different platform or clear filters'
-                                : 'Check back later for new content',
-                            context,
-                            multiplier: 0.9,
-                            color: Colors.grey[500],
-                            textAlign: TextAlign.center,
-                            maxLines: 2, // FIXED: Add maxLines
-                          ),
-                        ],
-                      ),
+          // Database tutorials list (non-PDF only)
+          if (tutorials.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.link, color: const Color(0xFF27445D), size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: _buildText(
+                      'External Resources',
+                      context,
+                      multiplier: 1.1,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF27445D),
                     ),
-                  )
-                  : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    itemCount: tutorials.length,
-                    itemBuilder: (context, index) {
-                      final tutorial = tutorials[index];
-                      final bool isSelected =
-                          selectedTutorial != null &&
-                          tutorial['id'] == selectedTutorial!['id'];
+                  ),
+                ],
+              ),
+            ),
 
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12.0),
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.0),
-                          side:
-                              isSelected
-                                  ? const BorderSide(
-                                    color: Color(0xFF27445D),
-                                    width: 2,
-                                  )
-                                  : BorderSide.none,
+            // External tutorials list
+            ...tutorials.map((tutorial) {
+              final bool isSelected =
+                  selectedTutorial != null &&
+                  tutorial['id'] == selectedTutorial!['id'];
+
+              return Container(
+                margin: const EdgeInsets.only(
+                  bottom: 12.0,
+                  left: 16,
+                  right: 16,
+                ),
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    side:
+                        isSelected
+                            ? const BorderSide(
+                              color: Color(0xFF27445D),
+                              width: 2,
+                            )
+                            : BorderSide.none,
+                  ),
+                  child: InkWell(
+                    onTap: () => _openTutorial(tutorial),
+                    onLongPress:
+                        () => _speakText(
+                          tutorial['title'] ??
+                              tutorial['file_name'] ??
+                              'Tutorial',
                         ),
-                        child: InkWell(
-                          // FIXED: Use InkWell for better tap handling
-                          onTap: () => _openTutorial(tutorial),
-                          borderRadius: BorderRadius.circular(12.0),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
+                    borderRadius: BorderRadius.circular(12.0),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          // Leading image
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: _buildThumbnailImage(tutorial, size: 56),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Content with proper overflow handling
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Leading image
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: _buildThumbnailImage(
-                                    tutorial,
-                                    size: 56,
-                                  ),
+                                // Title
+                                _buildText(
+                                  tutorial['title'] ??
+                                      tutorial['file_name'] ??
+                                      'Untitled',
+                                  context,
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w600,
+                                  maxLines: 2,
                                 ),
-                                const SizedBox(width: 16),
+                                const SizedBox(height: 8),
 
-                                // FIXED: Content with proper overflow handling
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Title
-                                      _buildText(
-                                        tutorial['title'] ??
-                                            tutorial['file_name'] ??
-                                            'Untitled',
-                                        context,
-                                        fontWeight:
-                                            isSelected
-                                                ? FontWeight.bold
-                                                : FontWeight.w600,
-                                        maxLines: 2, // FIXED: Add maxLines
-                                      ),
-                                      const SizedBox(height: 8),
-
-                                      // Platform badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _getPlatformColor(
-                                            tutorial['platform'],
-                                          ).withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: _getPlatformColor(
-                                              tutorial['platform'],
-                                            ).withOpacity(0.3),
-                                          ),
-                                        ),
-                                        child: _buildText(
-                                          tutorial['platform']
-                                              .toString()
-                                              .replaceAll('_', ' ')
-                                              .toUpperCase(),
-                                          context,
-                                          multiplier: 0.75,
-                                          color: _getPlatformColor(
-                                            tutorial['platform'],
-                                          ),
-                                          fontWeight: FontWeight.bold,
-                                          maxLines: 1, // FIXED: Add maxLines
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-
-                                // Trailing icon
+                                // Platform badge
                                 Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF27445D,
-                                    ).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
-                                  padding: const EdgeInsets.all(8),
-                                  child: Icon(
-                                    tutorial['file_type'] == 'pdf'
-                                        ? Icons.picture_as_pdf
-                                        : Icons.open_in_new,
-                                    color: const Color(0xFF27445D),
-                                    size: 20,
+                                  decoration: BoxDecoration(
+                                    color: _getPlatformColor(
+                                      tutorial['platform'],
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _getPlatformColor(
+                                        tutorial['platform'],
+                                      ).withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: _buildText(
+                                    tutorial['platform']
+                                        .toString()
+                                        .replaceAll('_', ' ')
+                                        .toUpperCase(),
+                                    context,
+                                    multiplier: 0.75,
+                                    color: _getPlatformColor(
+                                      tutorial['platform'],
+                                    ),
+                                    fontWeight: FontWeight.bold,
+                                    maxLines: 1,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                      );
-                    },
+                          const SizedBox(width: 16),
+
+                          // Trailing icon
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF27445D).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.open_in_new,
+                              color: const Color(0xFF27445D),
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-        ),
-      ],
+                ),
+              );
+            }).toList(),
+
+            // Add some bottom padding
+            SizedBox(height: 20),
+          ] else if (getFilteredInteractiveTutorials().isEmpty) ...[
+            // Show message when no tutorials available
+            Container(
+              height: 300,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      _buildText(
+                        'No tutorials available',
+                        context,
+                        multiplier: 1.2,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildText(
+                        selectedPlatform != null
+                            ? 'Try selecting a different platform or clear filters'
+                            : 'Check back later for new content',
+                        context,
+                        multiplier: 0.9,
+                        color: Colors.grey[500],
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1171,45 +1288,155 @@ class _TutorialPage extends State<TutorialPage>
 
   @override
   Widget build(BuildContext context) {
-    // If PDF is being viewed, show the PDF viewer directly
-    if (isPdfViewVisible) {
-      return _buildPdfViewer();
-    }
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        return SidebarLayoutWrapper(
+          currentPage: '/tutorials',
+          pageTitle: 'Tutorials',
+          child: Stack(
+            children: [
+              _buildContent(),
 
-    // Otherwise, use the sidebar wrapper
-    return SidebarLayoutWrapper(
-      currentPage: '/tutorials',
-      pageTitle: 'Tutorials',
-      child: _buildContent(),
+              // TTS Indicator when enabled
+              if (_isTtsEnabled)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF27445D),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.volume_up, size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'TTS On',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Debug onboarding test button (only shows in debug mode)
+              if (kDebugMode)
+                Positioned(
+                  bottom: 80,
+                  right: 16,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton.extended(
+                        onPressed: () async {
+                          final user = _supabase.auth.currentUser;
+                          if (user != null) {
+                            try {
+                              await _supabase
+                                  .from('users')
+                                  .update({'tutorial_page_visited': false})
+                                  .eq('id', user.id);
+                              print('✅ Tutorial onboarding reset');
+                              setState(() {
+                                _showOnboarding = true;
+                              });
+                            } catch (e) {
+                              print(
+                                '❌ Error resetting tutorial onboarding: $e',
+                              );
+                            }
+                          }
+                        },
+                        icon: Icon(Icons.refresh),
+                        label: Text('🧪 Test Tutorial Tour'),
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                      SizedBox(height: 8),
+                      FloatingActionButton.extended(
+                        onPressed: () {
+                          setState(() {
+                            _showOnboarding = true;
+                          });
+                        },
+                        icon: Icon(Icons.help_outline),
+                        label: Text('Show Tutorial Tour'),
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Tutorial Page Onboarding Overlay
+              if (_showOnboarding)
+                _buildTutorialOnboardingOverlay(fontProvider),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildContent() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Bookmark-style category tabs
         _buildBookmarkTabs(),
 
-        // Main content area
+        // Main content area with proper constraints
         Expanded(
           child:
               selectedTutorial == null
                   ? _buildTutorialsList()
-                  : _buildTutorialDetail(selectedTutorial!),
+                  : SingleChildScrollView(
+                    child: _buildTutorialDetail(selectedTutorial!),
+                  ),
         ),
       ],
     );
   }
 }
 
-// Data model for category tabs
+// Data models
 class CategoryTab {
   final String title;
   final String? key;
   final Color color;
 
   CategoryTab({required this.title, required this.key, required this.color});
+}
+
+class InteractiveTutorial {
+  final String title;
+  final String description;
+  final String platform;
+  final String route;
+  final Color color;
+  final List<String> features;
+
+  InteractiveTutorial({
+    required this.title,
+    required this.description,
+    required this.platform,
+    required this.route,
+    required this.color,
+    required this.features,
+  });
 }
 
 // Custom painter for bookmark shape

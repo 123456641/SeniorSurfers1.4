@@ -3,6 +3,7 @@
 
     <!-- Add permission for reading images on Android 13+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- For older versions, you may still need this permission -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />

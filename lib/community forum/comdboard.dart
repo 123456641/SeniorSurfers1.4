@@ -3,7 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'dart:async';
 import 'package:realtime_client/src/realtime_channel.dart';
+import 'package:provider/provider.dart';
 import '../dashboardsidebar.dart';
+import '../providers/font_size_provider.dart';
+import '../widgets/scaled_text.dart';
+import '../services/tts_service.dart'; // Add TTS import
 
 // Get a reference to Supabase client
 final supabase = Supabase.instance.client;
@@ -22,11 +26,128 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
   String? _expandedTopicId;
   Map<String, List<Map<String, dynamic>>> _topicReplies = {};
   Map<String, bool> _loadingReplies = {};
+  bool _isTtsEnabled = false; // Track TTS setting
 
   @override
   void initState() {
     super.initState();
     _loadForumTopics();
+    _loadTtsPreference(); // Load TTS setting
+  }
+
+  // Load TTS preference from user settings
+  Future<void> _loadTtsPreference() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await supabase
+                .from('users')
+                .select('tts_enabled')
+                .eq('id', user.id)
+                .single();
+
+        setState(() {
+          _isTtsEnabled = response['tts_enabled'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error loading TTS preference: $e');
+    }
+  }
+
+  // Function to speak text when long pressed
+  Future<void> _speakText(String text) async {
+    if (_isTtsEnabled && text.isNotEmpty) {
+      try {
+        await TTSService().speak(text);
+
+        // Show feedback to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.volume_up, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Reading: ${text.length > 30 ? text.substring(0, 30) + "..." : text}',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFF27445D),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error in TTS: $e');
+      }
+    } else if (!_isTtsEnabled) {
+      // Show instruction to enable TTS
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.volume_off, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Enable "Read Text Aloud" in Settings to use this feature',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/settingsD'),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // Custom widget for long-pressable text
+  Widget _buildLongPressText({
+    required String text,
+    required double baseFontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+    double? height,
+  }) {
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        return GestureDetector(
+          onLongPress: () => _speakText(text),
+          child: Container(
+            child: ScaledText(
+              text,
+              baseFontSize: baseFontSize,
+              fontWeight: fontWeight,
+              color: color,
+              textAlign: textAlign,
+              maxLines: maxLines,
+              overflow: overflow,
+              height: height,
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _loadForumTopics() async {
@@ -151,14 +272,57 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SidebarLayoutWrapper(
-      currentPage: '/community',
-      pageTitle: 'Community Forum',
-      child: _buildContent(),
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        return SidebarLayoutWrapper(
+          currentPage: '/community',
+          pageTitle: 'Community Forum',
+          child: Stack(
+            children: [
+              _buildContent(fontProvider),
+              // TTS Indicator when enabled
+              if (_isTtsEnabled)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF27445D),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.volume_up, size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'TTS On',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(FontSizeProvider fontProvider) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isWideScreen = screenWidth > 600;
 
@@ -180,31 +344,34 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade600,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isWideScreen ? 24.0 : 20.0,
-                              vertical: isWideScreen ? 16.0 : 14.0,
+                        GestureDetector(
+                          onLongPress: () => _speakText('Start New Discussion'),
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isWideScreen ? 24.0 : 20.0,
+                                vertical: isWideScreen ? 16.0 : 14.0,
+                              ),
+                              elevation: 3,
                             ),
-                            textStyle: TextStyle(
-                              fontSize: isWideScreen ? 18.0 : 16.0,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const CreateTopicPage(),
+                                ),
+                              ).then((_) => _loadForumTopics());
+                            },
+                            icon: const Icon(Icons.add, size: 24),
+                            label: ScaledText(
+                              isWideScreen
+                                  ? 'Start New Discussion'
+                                  : 'New Topic',
+                              baseFontSize: isWideScreen ? 18.0 : 16.0,
                               fontWeight: FontWeight.w600,
                             ),
-                            elevation: 3,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const CreateTopicPage(),
-                              ),
-                            ).then((_) => _loadForumTopics());
-                          },
-                          icon: const Icon(Icons.add, size: 24),
-                          label: Text(
-                            isWideScreen ? 'Start New Discussion' : 'New Topic',
                           ),
                         ),
                       ],
@@ -222,13 +389,11 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                           border: Border.all(color: Colors.red.shade300),
                           borderRadius: BorderRadius.circular(8.0),
                         ),
-                        child: Text(
-                          _errorMessage,
-                          style: TextStyle(
-                            color: Colors.red.shade700,
-                            fontSize: 16.0,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: _buildLongPressText(
+                          text: _errorMessage,
+                          baseFontSize: 16.0,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.red.shade700,
                         ),
                       ),
                     ),
@@ -253,21 +418,18 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                       color: Colors.grey.shade400,
                                     ),
                                     const SizedBox(height: 16),
-                                    Text(
-                                      'No discussions yet',
-                                      style: TextStyle(
-                                        fontSize: 20.0,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey.shade600,
-                                      ),
+                                    _buildLongPressText(
+                                      text: 'No discussions yet',
+                                      baseFontSize: 20.0,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade600,
                                     ),
                                     const SizedBox(height: 8),
-                                    Text(
-                                      'Be the first to start a conversation!',
-                                      style: TextStyle(
-                                        fontSize: 16.0,
-                                        color: Colors.grey.shade500,
-                                      ),
+                                    _buildLongPressText(
+                                      text:
+                                          'Be the first to start a conversation!',
+                                      baseFontSize: 16.0,
+                                      color: Colors.grey.shade500,
                                       textAlign: TextAlign.center,
                                     ),
                                   ],
@@ -318,6 +480,8 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                             await _loadRepliesForTopic(topicId);
                                           }
                                         },
+                                        onLongPress:
+                                            () => _speakText(topic['title']),
                                         borderRadius: BorderRadius.circular(
                                           12.0,
                                         ),
@@ -347,21 +511,19 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                                     child:
                                                         user['profile_picture_url'] ==
                                                                 null
-                                                            ? Text(
+                                                            ? ScaledText(
                                                               fullName[0],
-                                                              style: TextStyle(
-                                                                fontSize:
-                                                                    isWideScreen
-                                                                        ? 18
-                                                                        : 16,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color:
-                                                                    Colors
-                                                                        .blue
-                                                                        .shade700,
-                                                              ),
+                                                              baseFontSize:
+                                                                  isWideScreen
+                                                                      ? 18
+                                                                      : 16,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color:
+                                                                  Colors
+                                                                      .blue
+                                                                      .shade700,
                                                             )
                                                             : null,
                                                   ),
@@ -372,33 +534,29 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: [
-                                                        Text(
-                                                          fullName,
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            fontSize:
-                                                                isWideScreen
-                                                                    ? 16.0
-                                                                    : 15.0,
-                                                            color:
-                                                                Colors
-                                                                    .grey
-                                                                    .shade700,
-                                                          ),
+                                                        _buildLongPressText(
+                                                          text: fullName,
+                                                          baseFontSize:
+                                                              isWideScreen
+                                                                  ? 16.0
+                                                                  : 15.0,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color:
+                                                              Colors
+                                                                  .grey
+                                                                  .shade700,
                                                         ),
-                                                        Text(
-                                                          timeAgo,
-                                                          style: TextStyle(
-                                                            color:
-                                                                Colors
-                                                                    .grey
-                                                                    .shade500,
-                                                            fontSize:
-                                                                isWideScreen
-                                                                    ? 14.0
-                                                                    : 13.0,
-                                                          ),
+                                                        _buildLongPressText(
+                                                          text: timeAgo,
+                                                          baseFontSize:
+                                                              isWideScreen
+                                                                  ? 14.0
+                                                                  : 13.0,
+                                                          color:
+                                                              Colors
+                                                                  .grey
+                                                                  .shade500,
                                                         ),
                                                       ],
                                                     ),
@@ -415,33 +573,23 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                               const SizedBox(height: 16.0),
 
                                               // Topic title
-                                              Text(
-                                                topic['title'],
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize:
-                                                      isWideScreen
-                                                          ? 20.0
-                                                          : 18.0,
-                                                  color: const Color(
-                                                    0xFF1565C0,
-                                                  ),
-                                                  height: 1.3,
-                                                ),
+                                              _buildLongPressText(
+                                                text: topic['title'],
+                                                baseFontSize:
+                                                    isWideScreen ? 20.0 : 18.0,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF1565C0),
+                                                height: 1.3,
                                               ),
                                               const SizedBox(height: 12.0),
 
                                               // Topic content preview
-                                              Text(
-                                                topic['content'],
-                                                style: TextStyle(
-                                                  fontSize:
-                                                      isWideScreen
-                                                          ? 16.0
-                                                          : 15.0,
-                                                  height: 1.5,
-                                                  color: Colors.grey.shade700,
-                                                ),
+                                              _buildLongPressText(
+                                                text: topic['content'],
+                                                baseFontSize:
+                                                    isWideScreen ? 16.0 : 15.0,
+                                                height: 1.5,
+                                                color: Colors.grey.shade700,
                                                 maxLines: isExpanded ? null : 3,
                                                 overflow:
                                                     isExpanded
@@ -460,26 +608,21 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                                     color: Colors.blue.shade600,
                                                   ),
                                                   const SizedBox(width: 6),
-                                                  Text(
-                                                    '${_topicReplies[topicId]?.length ?? 0} replies',
-                                                    style: TextStyle(
-                                                      color:
-                                                          Colors.blue.shade600,
-                                                      fontSize: 14.0,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
+                                                  _buildLongPressText(
+                                                    text:
+                                                        '${_topicReplies[topicId]?.length ?? 0} replies',
+                                                    baseFontSize: 14.0,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.blue.shade600,
                                                   ),
                                                   const Spacer(),
-                                                  Text(
-                                                    isExpanded
-                                                        ? 'Tap to collapse'
-                                                        : 'Tap to view replies',
-                                                    style: TextStyle(
-                                                      color:
-                                                          Colors.grey.shade500,
-                                                      fontSize: 13.0,
-                                                    ),
+                                                  _buildLongPressText(
+                                                    text:
+                                                        isExpanded
+                                                            ? 'Tap to collapse'
+                                                            : 'Tap to view replies',
+                                                    baseFontSize: 13.0,
+                                                    color: Colors.grey.shade500,
                                                   ),
                                                 ],
                                               ),
@@ -493,6 +636,7 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                                         _buildRepliesSection(
                                           topicId,
                                           isWideScreen,
+                                          fontProvider,
                                         ),
                                     ],
                                   ),
@@ -509,7 +653,11 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
     );
   }
 
-  Widget _buildRepliesSection(String topicId, bool isWideScreen) {
+  Widget _buildRepliesSection(
+    String topicId,
+    bool isWideScreen,
+    FontSizeProvider fontProvider,
+  ) {
     final replies = _topicReplies[topicId] ?? [];
     final isLoading = _loadingReplies[topicId] == true;
 
@@ -533,13 +681,11 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
               children: [
                 Icon(Icons.forum, color: Colors.blue.shade600, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'Discussion',
-                  style: TextStyle(
-                    fontSize: isWideScreen ? 18.0 : 16.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade700,
-                  ),
+                _buildLongPressText(
+                  text: 'Discussion',
+                  baseFontSize: isWideScreen ? 18.0 : 16.0,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
                 ),
               ],
             ),
@@ -555,12 +701,11 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
             Padding(
               padding: EdgeInsets.all(isWideScreen ? 32.0 : 24.0),
               child: Center(
-                child: Text(
-                  'No replies yet. Be the first to join the conversation!',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: isWideScreen ? 16.0 : 15.0,
-                  ),
+                child: _buildLongPressText(
+                  text:
+                      'No replies yet. Be the first to join the conversation!',
+                  baseFontSize: isWideScreen ? 16.0 : 15.0,
+                  color: Colors.grey.shade600,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -577,18 +722,26 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
               separatorBuilder:
                   (context, index) => const SizedBox(height: 12.0),
               itemBuilder: (context, index) {
-                return _buildReplyCard(replies[index], isWideScreen);
+                return _buildReplyCard(
+                  replies[index],
+                  isWideScreen,
+                  fontProvider,
+                );
               },
             ),
 
           // Reply input
-          _buildReplyInput(topicId, isWideScreen),
+          _buildReplyInput(topicId, isWideScreen, fontProvider),
         ],
       ),
     );
   }
 
-  Widget _buildReplyCard(Map<String, dynamic> reply, bool isWideScreen) {
+  Widget _buildReplyCard(
+    Map<String, dynamic> reply,
+    bool isWideScreen,
+    FontSizeProvider fontProvider,
+  ) {
     final user = reply['users'] as Map<String, dynamic>? ?? {};
     final firstName = user['first_name'] ?? 'Unknown';
     final lastName = user['last_name'] ?? 'User';
@@ -600,164 +753,176 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
     final isCurrentUserReply =
         currentUser != null && currentUser.id == user['id'];
 
-    return Container(
-      padding: EdgeInsets.all(isWideScreen ? 16.0 : 14.0),
-      decoration: BoxDecoration(
-        color: isCurrentUserReply ? Colors.blue.shade50 : Colors.white,
-        borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(
-          color:
-              isCurrentUserReply ? Colors.blue.shade200 : Colors.grey.shade200,
+    return GestureDetector(
+      onLongPress: () => _speakText(reply['content']),
+      child: Container(
+        padding: EdgeInsets.all(isWideScreen ? 16.0 : 14.0),
+        decoration: BoxDecoration(
+          color: isCurrentUserReply ? Colors.blue.shade50 : Colors.white,
+          borderRadius: BorderRadius.circular(8.0),
+          border: Border.all(
+            color:
+                isCurrentUserReply
+                    ? Colors.blue.shade200
+                    : Colors.grey.shade200,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: isWideScreen ? 18 : 16,
-                backgroundImage:
-                    user['profile_picture_url'] != null
-                        ? NetworkImage(user['profile_picture_url'])
-                        : null,
-                backgroundColor: Colors.green.shade100,
-                child:
-                    user['profile_picture_url'] == null
-                        ? Text(
-                          fullName[0],
-                          style: TextStyle(
-                            fontSize: isWideScreen ? 14 : 12,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: isWideScreen ? 18 : 16,
+                  backgroundImage:
+                      user['profile_picture_url'] != null
+                          ? NetworkImage(user['profile_picture_url'])
+                          : null,
+                  backgroundColor: Colors.green.shade100,
+                  child:
+                      user['profile_picture_url'] == null
+                          ? ScaledText(
+                            fullName[0],
+                            baseFontSize: isWideScreen ? 14 : 12,
                             fontWeight: FontWeight.bold,
                             color: Colors.green.shade700,
-                          ),
-                        )
-                        : null,
-              ),
-              const SizedBox(width: 10.0),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fullName,
-                      style: TextStyle(
+                          )
+                          : null,
+                ),
+                const SizedBox(width: 10.0),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildLongPressText(
+                        text: fullName,
+                        baseFontSize: isWideScreen ? 15.0 : 14.0,
                         fontWeight: FontWeight.w600,
-                        fontSize: isWideScreen ? 15.0 : 14.0,
                         color: Colors.grey.shade700,
                       ),
-                    ),
-                    Text(
-                      timeAgo,
-                      style: TextStyle(
+                      _buildLongPressText(
+                        text: timeAgo,
+                        baseFontSize: isWideScreen ? 13.0 : 12.0,
                         color: Colors.grey.shade500,
-                        fontSize: isWideScreen ? 13.0 : 12.0,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              if (isCurrentUserReply)
-                PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    if (value == 'delete') {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder:
-                            (context) => AlertDialog(
-                              title: const Text('Delete Reply'),
-                              content: const Text(
-                                'Are you sure you want to delete this reply?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed:
-                                      () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
+                if (isCurrentUserReply)
+                  PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'delete') {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder:
+                              (context) => AlertDialog(
+                                title: const ScaledText(
+                                  'Delete Reply',
+                                  baseFontSize: 18,
                                 ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.red,
+                                content: const ScaledText(
+                                  'Are you sure you want to delete this reply?',
+                                  baseFontSize: 16,
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed:
+                                        () => Navigator.pop(context, false),
+                                    child: const ScaledText(
+                                      'Cancel',
+                                      baseFontSize: 14,
+                                    ),
                                   ),
-                                  child: const Text('Delete'),
+                                  TextButton(
+                                    onPressed:
+                                        () => Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                    child: const ScaledText(
+                                      'Delete',
+                                      baseFontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                        );
+
+                        if (confirmed == true) {
+                          try {
+                            await supabase
+                                .from('forum_replies')
+                                .delete()
+                                .eq('id', reply['id']);
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Reply deleted'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+
+                            // Reload replies
+                            String? topicId;
+                            for (var entry in _topicReplies.entries) {
+                              if (entry.value.any(
+                                (r) => r['id'] == reply['id'],
+                              )) {
+                                topicId = entry.key;
+                                break;
+                              }
+                            }
+                            if (topicId != null) {
+                              await _loadRepliesForTopic(topicId);
+                            }
+                          } catch (error) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error deleting reply: $error'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    itemBuilder:
+                        (context) => [
+                          const PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete, color: Colors.red, size: 20),
+                                SizedBox(width: 8.0),
+                                Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
                                 ),
                               ],
                             ),
-                      );
-
-                      if (confirmed == true) {
-                        try {
-                          await supabase
-                              .from('forum_replies')
-                              .delete()
-                              .eq('id', reply['id']);
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Reply deleted'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-
-                          // Reload replies
-                          String? topicId;
-                          for (var entry in _topicReplies.entries) {
-                            if (entry.value.any(
-                              (r) => r['id'] == reply['id'],
-                            )) {
-                              topicId = entry.key;
-                              break;
-                            }
-                          }
-                          if (topicId != null) {
-                            await _loadRepliesForTopic(topicId);
-                          }
-                        } catch (error) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error deleting reply: $error'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  },
-                  itemBuilder:
-                      (context) => [
-                        const PopupMenuItem<String>(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete, color: Colors.red, size: 20),
-                              SizedBox(width: 8.0),
-                              Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ],
                           ),
-                        ),
-                      ],
-                ),
-            ],
-          ),
-          SizedBox(height: isWideScreen ? 12.0 : 10.0),
-          Text(
-            reply['content'],
-            style: TextStyle(
-              fontSize: isWideScreen ? 16.0 : 15.0,
+                        ],
+                  ),
+              ],
+            ),
+            SizedBox(height: isWideScreen ? 12.0 : 10.0),
+            _buildLongPressText(
+              text: reply['content'],
+              baseFontSize: isWideScreen ? 16.0 : 15.0,
               height: 1.5,
               color: Colors.grey.shade700,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildReplyInput(String topicId, bool isWideScreen) {
+  Widget _buildReplyInput(
+    String topicId,
+    bool isWideScreen,
+    FontSizeProvider fontProvider,
+  ) {
     final TextEditingController replyController = TextEditingController();
     bool isSubmitting = false;
 
@@ -768,13 +933,11 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Join the conversation',
-                style: TextStyle(
-                  fontSize: isWideScreen ? 16.0 : 15.0,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
+              _buildLongPressText(
+                text: 'Join the conversation',
+                baseFontSize: isWideScreen ? 16.0 : 15.0,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
               ),
               const SizedBox(height: 12.0),
               TextField(
@@ -782,7 +945,10 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                 decoration: InputDecoration(
                   hintText: 'Write your reply here...',
                   hintStyle: TextStyle(
-                    fontSize: isWideScreen ? 16.0 : 15.0,
+                    fontSize:
+                        fontProvider.fontSize *
+                        (isWideScreen ? 16.0 : 15.0) /
+                        16.0,
                     color: Colors.grey.shade500,
                   ),
                   border: OutlineInputBorder(
@@ -801,7 +967,12 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
                     vertical: isWideScreen ? 16.0 : 14.0,
                   ),
                 ),
-                style: TextStyle(fontSize: isWideScreen ? 16.0 : 15.0),
+                style: TextStyle(
+                  fontSize:
+                      fontProvider.fontSize *
+                      (isWideScreen ? 16.0 : 15.0) /
+                      16.0,
+                ),
                 maxLines: 4,
                 minLines: 2,
               ),
@@ -809,58 +980,67 @@ class _CommunityForumPageState extends State<CommunityForumPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed:
-                        isSubmitting
-                            ? null
-                            : () async {
-                              if (replyController.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please enter a reply'),
-                                    backgroundColor: Colors.orange,
-                                  ),
+                  GestureDetector(
+                    onLongPress:
+                        () => _speakText(
+                          isSubmitting ? 'Posting...' : 'Post Reply',
+                        ),
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          isSubmitting
+                              ? null
+                              : () async {
+                                if (replyController.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please enter a reply'),
+                                      backgroundColor: Colors.orange,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                setLocalState(() {
+                                  isSubmitting = true;
+                                });
+
+                                await _submitReply(
+                                  topicId,
+                                  replyController.text,
                                 );
-                                return;
-                              }
 
-                              setLocalState(() {
-                                isSubmitting = true;
-                              });
-
-                              await _submitReply(topicId, replyController.text);
-
-                              replyController.clear();
-                              setLocalState(() {
-                                isSubmitting = false;
-                              });
-                            },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isWideScreen ? 20.0 : 16.0,
-                        vertical: isWideScreen ? 12.0 : 10.0,
+                                replyController.clear();
+                                setLocalState(() {
+                                  isSubmitting = false;
+                                });
+                              },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isWideScreen ? 20.0 : 16.0,
+                          vertical: isWideScreen ? 12.0 : 10.0,
+                        ),
                       ),
-                      textStyle: TextStyle(
-                        fontSize: isWideScreen ? 16.0 : 15.0,
+                      icon:
+                          isSubmitting
+                              ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                              : const Icon(Icons.send, size: 18),
+                      label: ScaledText(
+                        isSubmitting ? 'Posting...' : 'Post Reply',
+                        baseFontSize: isWideScreen ? 16.0 : 15.0,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    icon:
-                        isSubmitting
-                            ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                            : const Icon(Icons.send, size: 18),
-                    label: Text(isSubmitting ? 'Posting...' : 'Post Reply'),
                   ),
                 ],
               ),
@@ -884,6 +1064,128 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isTtsEnabled = false; // Track TTS setting
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTtsPreference(); // Load TTS setting
+  }
+
+  // Load TTS preference from user settings
+  Future<void> _loadTtsPreference() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final response =
+            await supabase
+                .from('users')
+                .select('tts_enabled')
+                .eq('id', user.id)
+                .single();
+
+        setState(() {
+          _isTtsEnabled = response['tts_enabled'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error loading TTS preference: $e');
+    }
+  }
+
+  // Function to speak text when long pressed
+  Future<void> _speakText(String text) async {
+    if (_isTtsEnabled && text.isNotEmpty) {
+      try {
+        await TTSService().speak(text);
+
+        // Show feedback to user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.volume_up, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Reading: ${text.length > 30 ? text.substring(0, 30) + "..." : text}',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFF27445D),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error in TTS: $e');
+      }
+    } else if (!_isTtsEnabled) {
+      // Show instruction to enable TTS
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.volume_off, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Enable "Read Text Aloud" in Settings to use this feature',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/settingsD'),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // Custom widget for long-pressable text
+  Widget _buildLongPressText({
+    required String text,
+    required double baseFontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    TextAlign? textAlign,
+    int? maxLines,
+    TextOverflow? overflow,
+    double? height,
+  }) {
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        return GestureDetector(
+          onLongPress: () => _speakText(text),
+          child: Container(
+            child: ScaledText(
+              text,
+              baseFontSize: baseFontSize,
+              fontWeight: fontWeight,
+              color: color,
+              textAlign: textAlign,
+              maxLines: maxLines,
+              overflow: overflow,
+              height: height,
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> _submitTopic() async {
     if (!_formKey.currentState!.validate()) {
@@ -951,237 +1253,314 @@ class _CreateTopicPageState extends State<CreateTopicPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isWideScreen = screenWidth > 600;
+    return Consumer<FontSizeProvider>(
+      builder: (context, fontProvider, child) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isWideScreen = screenWidth > 600;
 
-    return SidebarLayoutWrapper(
-      currentPage: '/community',
-      pageTitle: 'Start New Discussion',
-      child: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: isWideScreen ? 800 : screenWidth * 0.95,
-              minHeight: 300,
-            ),
-            padding: EdgeInsets.all(isWideScreen ? 24.0 : 20.0),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(isWideScreen ? 32.0 : 24.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Header
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.create,
-                            color: Colors.blue.shade600,
-                            size: isWideScreen ? 28 : 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Create New Discussion',
-                            style: TextStyle(
-                              fontSize: isWideScreen ? 24.0 : 20.0,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
+        return SidebarLayoutWrapper(
+          currentPage: '/community',
+          pageTitle: 'Start New Discussion',
+          child: Stack(
+            children: [
+              Center(
+                child: SingleChildScrollView(
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: isWideScreen ? 800 : screenWidth * 0.95,
+                      minHeight: 300,
+                    ),
+                    padding: EdgeInsets.all(isWideScreen ? 24.0 : 20.0),
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
                       ),
-                      SizedBox(height: isWideScreen ? 32.0 : 24.0),
-
-                      // Title field
-                      Text(
-                        'Discussion Title',
-                        style: TextStyle(
-                          fontSize: isWideScreen ? 18.0 : 16.0,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _titleController,
-                        style: TextStyle(fontSize: isWideScreen ? 18.0 : 16.0),
-                        decoration: InputDecoration(
-                          hintText: 'Enter a clear, descriptive title...',
-                          hintStyle: TextStyle(
-                            fontSize: isWideScreen ? 16.0 : 15.0,
-                            color: Colors.grey.shade500,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(
-                              color: Colors.blue.shade400,
-                              width: 2,
-                            ),
-                          ),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: isWideScreen ? 16.0 : 14.0,
-                            vertical: isWideScreen ? 16.0 : 14.0,
-                          ),
-                          errorStyle: TextStyle(
-                            fontSize: isWideScreen ? 14.0 : 13.0,
-                            color: Colors.red.shade600,
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a title for your discussion';
-                          }
-                          if (value.trim().length < 5) {
-                            return 'Title should be at least 5 characters long';
-                          }
-                          return null;
-                        },
-                      ),
-                      SizedBox(height: isWideScreen ? 24.0 : 20.0),
-
-                      // Content field
-                      Text(
-                        'Your Message',
-                        style: TextStyle(
-                          fontSize: isWideScreen ? 18.0 : 16.0,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _contentController,
-                        style: TextStyle(
-                          fontSize: isWideScreen ? 16.0 : 15.0,
-                          height: 1.5,
-                        ),
-                        decoration: InputDecoration(
-                          hintText:
-                              'Share your thoughts, ask a question, or start a conversation...',
-                          hintStyle: TextStyle(
-                            fontSize: isWideScreen ? 15.0 : 14.0,
-                            color: Colors.grey.shade500,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(
-                              color: Colors.blue.shade400,
-                              width: 2,
-                            ),
-                          ),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: isWideScreen ? 16.0 : 14.0,
-                            vertical: isWideScreen ? 16.0 : 14.0,
-                          ),
-                          alignLabelWithHint: true,
-                          errorStyle: TextStyle(
-                            fontSize: isWideScreen ? 14.0 : 13.0,
-                            color: Colors.red.shade600,
-                          ),
-                        ),
-                        maxLines: isWideScreen ? 12 : 10,
-                        minLines: isWideScreen ? 6 : 5,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your message';
-                          }
-                          if (value.trim().length < 10) {
-                            return 'Message should be at least 10 characters long';
-                          }
-                          return null;
-                        },
-                      ),
-                      SizedBox(height: isWideScreen ? 32.0 : 24.0),
-
-                      // Action buttons
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          // Cancel button
-                          TextButton(
-                            onPressed:
-                                _isSubmitting
-                                    ? null
-                                    : () {
-                                      Navigator.pop(context);
-                                    },
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isWideScreen ? 24.0 : 20.0,
-                                vertical: isWideScreen ? 16.0 : 14.0,
+                      child: Padding(
+                        padding: EdgeInsets.all(isWideScreen ? 32.0 : 24.0),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Header
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.create,
+                                    color: Colors.blue.shade600,
+                                    size: isWideScreen ? 28 : 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _buildLongPressText(
+                                    text: 'Create New Discussion',
+                                    baseFontSize: isWideScreen ? 24.0 : 20.0,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ],
                               ),
-                              textStyle: TextStyle(
-                                fontSize: isWideScreen ? 16.0 : 15.0,
+                              SizedBox(height: isWideScreen ? 32.0 : 24.0),
+
+                              // Title field
+                              _buildLongPressText(
+                                text: 'Discussion Title',
+                                baseFontSize: isWideScreen ? 18.0 : 16.0,
                                 fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
                               ),
-                            ),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          ),
-                          const SizedBox(width: 16.0),
+                              const SizedBox(height: 8.0),
+                              TextFormField(
+                                controller: _titleController,
+                                style: TextStyle(
+                                  fontSize:
+                                      fontProvider.fontSize *
+                                      (isWideScreen ? 18.0 : 16.0) /
+                                      16.0,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Enter a clear, descriptive title...',
+                                  hintStyle: TextStyle(
+                                    fontSize:
+                                        fontProvider.fontSize *
+                                        (isWideScreen ? 16.0 : 15.0) /
+                                        16.0,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: BorderSide(
+                                      color: Colors.blue.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: isWideScreen ? 16.0 : 14.0,
+                                    vertical: isWideScreen ? 16.0 : 14.0,
+                                  ),
+                                  errorStyle: TextStyle(
+                                    fontSize:
+                                        fontProvider.fontSize *
+                                        (isWideScreen ? 14.0 : 13.0) /
+                                        16.0,
+                                    color: Colors.red.shade600,
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Please enter a title for your discussion';
+                                  }
+                                  if (value.trim().length < 5) {
+                                    return 'Title should be at least 5 characters long';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              SizedBox(height: isWideScreen ? 24.0 : 20.0),
 
-                          // Create button
-                          ElevatedButton.icon(
-                            onPressed: _isSubmitting ? null : _submitTopic,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade600,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isWideScreen ? 24.0 : 20.0,
-                                vertical: isWideScreen ? 16.0 : 14.0,
-                              ),
-                              textStyle: TextStyle(
-                                fontSize: isWideScreen ? 16.0 : 15.0,
+                              // Content field
+                              _buildLongPressText(
+                                text: 'Your Message',
+                                baseFontSize: isWideScreen ? 18.0 : 16.0,
                                 fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
                               ),
-                              elevation: 3,
-                            ),
-                            icon:
-                                _isSubmitting
-                                    ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
+                              const SizedBox(height: 8.0),
+                              TextFormField(
+                                controller: _contentController,
+                                style: TextStyle(
+                                  fontSize:
+                                      fontProvider.fontSize *
+                                      (isWideScreen ? 16.0 : 15.0) /
+                                      16.0,
+                                  height: 1.5,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText:
+                                      'Share your thoughts, ask a question, or start a conversation...',
+                                  hintStyle: TextStyle(
+                                    fontSize:
+                                        fontProvider.fontSize *
+                                        (isWideScreen ? 15.0 : 14.0) /
+                                        16.0,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide: BorderSide(
+                                      color: Colors.blue.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: isWideScreen ? 16.0 : 14.0,
+                                    vertical: isWideScreen ? 16.0 : 14.0,
+                                  ),
+                                  alignLabelWithHint: true,
+                                  errorStyle: TextStyle(
+                                    fontSize:
+                                        fontProvider.fontSize *
+                                        (isWideScreen ? 14.0 : 13.0) /
+                                        16.0,
+                                    color: Colors.red.shade600,
+                                  ),
+                                ),
+                                maxLines: isWideScreen ? 12 : 10,
+                                minLines: isWideScreen ? 6 : 5,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Please enter your message';
+                                  }
+                                  if (value.trim().length < 10) {
+                                    return 'Message should be at least 10 characters long';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              SizedBox(height: isWideScreen ? 32.0 : 24.0),
+
+                              // Action buttons
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  // Cancel button
+                                  GestureDetector(
+                                    onLongPress: () => _speakText('Cancel'),
+                                    child: TextButton(
+                                      onPressed:
+                                          _isSubmitting
+                                              ? null
+                                              : () {
+                                                Navigator.pop(context);
+                                              },
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal:
+                                              isWideScreen ? 24.0 : 20.0,
+                                          vertical: isWideScreen ? 16.0 : 14.0,
+                                        ),
                                       ),
-                                    )
-                                    : const Icon(Icons.create, size: 20),
-                            label: Text(
-                              _isSubmitting
-                                  ? 'Creating...'
-                                  : 'Create Discussion',
-                            ),
+                                      child: ScaledText(
+                                        'Cancel',
+                                        baseFontSize:
+                                            isWideScreen ? 16.0 : 15.0,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16.0),
+
+                                  // Create button
+                                  GestureDetector(
+                                    onLongPress:
+                                        () => _speakText(
+                                          _isSubmitting
+                                              ? 'Creating...'
+                                              : 'Create Discussion',
+                                        ),
+                                    child: ElevatedButton.icon(
+                                      onPressed:
+                                          _isSubmitting ? null : _submitTopic,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal:
+                                              isWideScreen ? 24.0 : 20.0,
+                                          vertical: isWideScreen ? 16.0 : 14.0,
+                                        ),
+                                        elevation: 3,
+                                      ),
+                                      icon:
+                                          _isSubmitting
+                                              ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(Colors.white),
+                                                ),
+                                              )
+                                              : const Icon(
+                                                Icons.create,
+                                                size: 20,
+                                              ),
+                                      label: ScaledText(
+                                        _isSubmitting
+                                            ? 'Creating...'
+                                            : 'Create Discussion',
+                                        baseFontSize:
+                                            isWideScreen ? 16.0 : 15.0,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              // TTS Indicator when enabled
+              if (_isTtsEnabled)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF27445D),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.volume_up, size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'TTS On',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
